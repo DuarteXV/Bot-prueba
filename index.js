@@ -4,7 +4,6 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   jidNormalizedUser,
-  getAggregateVotesInPollMessage,
   proto,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
@@ -52,10 +51,10 @@ async function startBot() {
   let usePairingCode = false
   if (!state.creds.registered) {
     console.log(chalk.yellow(`¿Cómo deseas vincular el bot?`))
-    console.log(chalk.white(`1. Código de 8 dígitos (Pairing Code)`))
-    console.log(chalk.white(`2. Código QR tradicional`))
+    console.log(chalk.white(`  1. Código de 8 dígitos (Pairing Code)`))
+    console.log(chalk.white(`  2. Código QR tradicional`))
     const option = await question(chalk.cyan('\nSelecciona una opción (1/2): '))
-    usePairingCode = option === '1'
+    usePairingCode = option.trim() === '1'
   }
 
   plugins = await loadPlugins()
@@ -67,48 +66,57 @@ async function startBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
-    printQRInTerminal: !usePairingCode, // Solo imprime QR si no se usa Pairing Code
+    printQRInTerminal: !usePairingCode,
     browser: ['Ubuntu', 'Chrome', '120.0'],
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
     getMessage: async (key) => {
       return { conversation: '' }
     },
-    // Optimizaciones de latencia (tus ajustes originales)
     connectTimeoutMs: 30_000,
     defaultQueryTimeoutMs: 15_000,
     keepAliveIntervalMs: 15_000,
     emitOwnEvents: false,
     fireInitQueries: false,
-    shouldIgnoreJid: (jid) => {
-      return jid === 'status@broadcast'
-    },
+    shouldIgnoreJid: (jid) => jid === 'status@broadcast',
   })
 
-  // Generación del Pairing Code si se seleccionó
+  // ── Pairing Code ─────────────────────────────────────────────────────────
   if (usePairingCode && !state.creds.registered) {
-    let phoneNumber = await question(chalk.cyan('\nIntroduce tu número de WhatsApp (ej: 573001234567): '))
-    phoneNumber = phoneNumber.replace(/[^0-9]/g, '')
+    let phoneNumber = await question(chalk.cyan('\nIntroduce tu número (ej: 573001234567): '))
+    phoneNumber = phoneNumber.replace(/[^0-9]/g, '').trim()
 
     if (!phoneNumber) {
-      console.log(chalk.red('Número inválido. Reinicia el bot.'))
+      console.log(chalk.red('❌ Número inválido. Reinicia el bot.'))
       process.exit(1)
     }
 
-    setTimeout(async () => {
-      try {
-        const code = await bot.requestPairingCode(phoneNumber)
-        console.log(chalk.white(`\nTu código de vinculación es: `) + chalk.black.bgGreen.bold(` ${code} `) + `\n`)
-      } catch (e) {
-        console.error(chalk.red('[ERROR PAIRING]') + ' No se pudo generar el código.')
-      }
-    }, 3000)
+    // Esperar a que el socket esté listo antes de pedir el código
+    await new Promise((resolve) => {
+      bot.ev.once('connection.update', (update) => {
+        if (update.connection === 'connecting' || update.isOnline !== undefined) resolve()
+        // También resolvemos tras 3s por si el evento no llega
+      })
+      setTimeout(resolve, 3000)
+    })
+
+    try {
+      const code = await bot.requestPairingCode(phoneNumber)
+      // Formatear el código como XXXX-XXXX para mejor legibilidad
+      const formatted = code?.match(/.{1,4}/g)?.join('-') || code
+      console.log(chalk.cyan('\n┌──────────────────────────────┐'))
+      console.log(chalk.cyan('│') + chalk.white('   🔑 CÓDIGO DE VINCULACIÓN    ') + chalk.cyan('│'))
+      console.log(chalk.cyan('│') + chalk.green.bold(`        ${formatted}        `) + chalk.cyan('│'))
+      console.log(chalk.cyan('└──────────────────────────────┘\n'))
+    } catch (e) {
+      console.error(chalk.red(`[ERROR PAIRING] No se pudo generar el código: ${e.message}`))
+    }
   }
 
   // Guardar credenciales
   bot.ev.on('creds.update', saveCreds)
 
-  // Manejo de conexión
+  // ── Manejo de conexión ────────────────────────────────────────────────────
   bot.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -125,7 +133,7 @@ async function startBot() {
       if (shouldReconnect && reconnectAttempts < MAX_RECONNECT) {
         reconnectAttempts++
         const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000)
-        console.log(chalk.yellow(`[RECONECTANDO] Intento ${reconnectAttempts}/${MAX_RECONNECT} en ${delay/1000}s...`))
+        console.log(chalk.yellow(`[RECONECTANDO] Intento ${reconnectAttempts}/${MAX_RECONNECT} en ${delay / 1000}s...`))
         setTimeout(startBot, delay)
       } else if (reason === DisconnectReason.loggedOut) {
         console.log(chalk.red('[SESIÓN] Sesión cerrada. Borra la carpeta sessions/main y reinicia.'))
@@ -164,7 +172,7 @@ async function startBot() {
     }
   })
 
-  // Manejo de mensajes
+  // ── Manejo de mensajes ────────────────────────────────────────────────────
   bot.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
     for (const msg of messages) {
@@ -186,7 +194,7 @@ async function startBot() {
   return bot
 }
 
-// Capturar errores no manejados
+// ── Capturar errores no manejados ────────────────────────────────────────────
 process.on('uncaughtException', (err) => {
   console.error(chalk.red(`\n[UNCAUGHT EXCEPTION]\n${err.stack || err}\n`))
 })
