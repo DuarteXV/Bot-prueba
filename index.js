@@ -13,6 +13,7 @@ import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 import chalk from 'chalk'
+import readline from 'readline'
 import { loadPlugins } from './lib/loader.js'
 import { handleMessage } from './lib/handler.js'
 import { db, saveDB, loadDB } from './lib/database.js'
@@ -21,6 +22,10 @@ import { connectSubBots } from './lib/subbots.js'
 import config from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// Interfaz para lectura de terminal
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+const question = (text) => new Promise((resolve) => rl.question(text, resolve))
 
 // Logger silencioso para mejor latencia
 const logger = pino({ level: 'silent' })
@@ -43,6 +48,16 @@ async function startBot() {
   console.log(chalk.cyan(`│`) + chalk.gray(`  Baileys v${version.join('.')}              `) + chalk.cyan(`│`))
   console.log(chalk.cyan(`└─────────────────────────────────┘\n`))
 
+  // Lógica para decidir método de conexión
+  let usePairingCode = false
+  if (!state.creds.registered) {
+    console.log(chalk.yellow(`¿Cómo deseas vincular el bot?`))
+    console.log(chalk.white(`1. Código de 8 dígitos (Pairing Code)`))
+    console.log(chalk.white(`2. Código QR tradicional`))
+    const option = await question(chalk.cyan('\nSelecciona una opción (1/2): '))
+    usePairingCode = option === '1'
+  }
+
   plugins = await loadPlugins()
 
   bot = makeWASocket({
@@ -52,24 +67,43 @@ async function startBot() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
-    printQRInTerminal: true,
+    printQRInTerminal: !usePairingCode, // Solo imprime QR si no se usa Pairing Code
     browser: ['Ubuntu', 'Chrome', '120.0'],
     syncFullHistory: false,
     generateHighQualityLinkPreview: false,
     getMessage: async (key) => {
       return { conversation: '' }
     },
-    // Optimizaciones de latencia
+    // Optimizaciones de latencia (tus ajustes originales)
     connectTimeoutMs: 30_000,
     defaultQueryTimeoutMs: 15_000,
     keepAliveIntervalMs: 15_000,
     emitOwnEvents: false,
     fireInitQueries: false,
     shouldIgnoreJid: (jid) => {
-      // Ignorar broadcast y grupos newsletter para mejor rendimiento
       return jid === 'status@broadcast'
     },
   })
+
+  // Generación del Pairing Code si se seleccionó
+  if (usePairingCode && !state.creds.registered) {
+    let phoneNumber = await question(chalk.cyan('\nIntroduce tu número de WhatsApp (ej: 573001234567): '))
+    phoneNumber = phoneNumber.replace(/[^0-9]/g, '')
+
+    if (!phoneNumber) {
+      console.log(chalk.red('Número inválido. Reinicia el bot.'))
+      process.exit(1)
+    }
+
+    setTimeout(async () => {
+      try {
+        const code = await bot.requestPairingCode(phoneNumber)
+        console.log(chalk.white(`\nTu código de vinculación es: `) + chalk.black.bgGreen.bold(` ${code} `) + `\n`)
+      } catch (e) {
+        console.error(chalk.red('[ERROR PAIRING]') + ' No se pudo generar el código.')
+      }
+    }, 3000)
+  }
 
   // Guardar credenciales
   bot.ev.on('creds.update', saveCreds)
@@ -78,7 +112,7 @@ async function startBot() {
   bot.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
-    if (qr) {
+    if (qr && !usePairingCode) {
       console.log(chalk.yellow('[QR] Escanea el código QR para conectarte'))
     }
 
@@ -130,7 +164,7 @@ async function startBot() {
     }
   })
 
-  // Manejo de mensajes con latencia optimizada
+  // Manejo de mensajes
   bot.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
     for (const msg of messages) {
