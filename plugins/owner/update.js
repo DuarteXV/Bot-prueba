@@ -1,25 +1,25 @@
 import { exec } from 'child_process'
-import { saveDB } from '../../lib/database.js'
 
 /**
- * @type {import('../../lib/handler').Handler}
+ * Plugin de Actualización vía Git
  */
-const handler = async (bot, m) => {
-  await bot.sendMessage(m.key.remoteJid, { text: '📥 *Buscando actualizaciones en GitHub...*' }, { quoted: m })
+const handler = async (ctx) => {
+  const { reply, saveDB } = ctx
+  
+  await reply('📥 *Buscando actualizaciones en el repositorio...*')
 
-  exec('git pull', async (err, stdout, stderr) => {
+  exec('git pull', async (err, stdout) => {
     if (err) {
-      return bot.sendMessage(m.key.remoteJid, { text: `❌ *Error al actualizar:*\n${err.message}` }, { quoted: m })
+      return reply(`❌ *Error de Git:* \n\`\`\`${err.message}\`\`\``)
     }
 
     if (stdout.includes('Already up to date')) {
-      return bot.sendMessage(m.key.remoteJid, { text: '✅ *El bot ya está actualizado a la última versión.*' }, { quoted: m })
+      return reply('✅ *El bot ya está actualizado.*')
     }
 
-    await bot.sendMessage(m.key.remoteJid, { 
-      text: `✅ *Actualizado con éxito:*\n\n${stdout}\n\n*Reiniciando para aplicar cambios...*` 
-    }, { quoted: m })
-
+    await reply(`✅ *Actualización exitosa:*\n\n${stdout}\n\n*Reiniciando...*`)
+    
+    // Guardar cambios antes de salir
     await saveDB()
     
     setTimeout(() => {
