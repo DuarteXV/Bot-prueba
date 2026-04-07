@@ -1,25 +1,19 @@
 import { exec } from 'child_process'
 
-/**
- * Plugin de Actualización vía Git
- */
-const handler = async (ctx) => {
-  const { reply, saveDB } = ctx
-  
-  await reply('📥 *Buscando actualizaciones en el repositorio...*')
+const handler = async ({ bot, from, reply, saveDB }) => {
+  await reply('📥 *Buscando actualizaciones en GitHub...*')
 
   exec('git pull', async (err, stdout) => {
     if (err) {
-      return reply(`❌ *Error de Git:* \n\`\`\`${err.message}\`\`\``)
+      return reply(`❌ *Error al actualizar:*\n\`\`\`${err.message}\`\`\``)
     }
 
     if (stdout.includes('Already up to date')) {
-      return reply('✅ *El bot ya está actualizado.*')
+      return reply('✅ *El bot ya está actualizado a la última versión.*')
     }
 
-    await reply(`✅ *Actualización exitosa:*\n\n${stdout}\n\n*Reiniciando...*`)
+    await reply(`✅ *Actualización descargada:*\n\n${stdout}\n\n*Reiniciando...*`)
     
-    // Guardar cambios antes de salir
     await saveDB()
     
     setTimeout(() => {
@@ -29,6 +23,8 @@ const handler = async (ctx) => {
 }
 
 handler.command = ['update', 'actualizar']
+handler.tags = ['owner']
+handler.help = ['update - Actualiza el bot desde el repositorio']
 handler.owner = true
 
 export default handler
