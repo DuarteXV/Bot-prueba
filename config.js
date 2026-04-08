@@ -5,7 +5,7 @@ export default {
   prefix: '.',
 
   // Números de owner (formato: número@s.whatsapp.net)
-  ownerNumber: ['573135180876@s.whatsapp.net'],
+  ownerNumber: ['573135180876'],
 
   // Canal de WhatsApp (newsletter JID)
   // Formato: 120363XXXXXXXXXX@newsletter
