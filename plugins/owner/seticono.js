@@ -1,5 +1,4 @@
-// plugins/owner/seticono.js
-import axios from 'axios'
+import fetch from 'node-fetch'
 import FormData from 'form-data'
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 import config from '../../config.js'
@@ -11,17 +10,26 @@ async function uploadToCDN(fileBuffer, fileName) {
   const form = new FormData()
   form.append('file', fileBuffer, { filename: fileName, contentType: 'image/jpeg' })
 
-  const res = await axios.post(CDN_URL, form, {
+  const res = await fetch(CDN_URL, {
+    method: 'POST',
     headers: {
       'x-cdn-token': CDN_TOKEN,
       ...form.getHeaders(),
     },
-    maxBodyLength: Infinity,
+    body: form,
   })
 
-  const json = res.data
+  const rawText = await res.text()
+
+  let json
+  try {
+    json = JSON.parse(rawText)
+  } catch (e) {
+    throw new Error(`No es JSON (HTTP ${res.status}):\n${rawText.slice(0, 300)}`)
+  }
+
   if (!json.status) throw new Error(json.message || 'Error desconocido')
-  return json.data
+  return { data: json.data, debug: { status: res.status, raw: rawText } }
 }
 
 const handler = async ({ bot, msg, from, reply }) => {
@@ -42,16 +50,29 @@ const handler = async ({ bot, msg, from, reply }) => {
   )
   if (!fileBuffer) return reply('❌ No se pudo descargar la imagen.')
 
-  const fileName = `icono_canal_${Date.now()}.jpg`
-  const data = await uploadToCDN(fileBuffer, fileName)
+  await reply(
+    `🔍 *Debug CDN*\n\n` +
+    `› URL: ${CDN_URL}\n` +
+    `› Token: ${CDN_TOKEN.slice(0, 10)}...\n` +
+    `› Buffer: ${fileBuffer.length} bytes\n` +
+    `› Archivo: icono_canal_${Date.now()}.jpg`
+  )
 
-  config.channelThumbUrl = data.url
+  const result = await uploadToCDN(fileBuffer, `icono_canal_${Date.now()}.jpg`)
+
+  await reply(
+    `📡 *Respuesta CDN*\n\n` +
+    `› HTTP: ${result.debug.status}\n` +
+    `› Raw:\n\`\`\`${result.debug.raw.slice(0, 500)}\`\`\``
+  )
+
+  config.channelThumbUrl = result.data.url
   config.channelThumb = fileBuffer.toString('base64')
 
   await bot.sendMessage(from, { react: { text: '✅', key: msg.key } })
   await reply(
     `✅ *Ícono del canal actualizado*\n\n` +
-    `› URL: ${data.url}\n\n` +
+    `› URL: ${result.data.url}\n\n` +
     `_Para que persista al reiniciar, guarda esta URL en config.js como channelThumbUrl_`
   )
 }
