@@ -15,7 +15,7 @@ import readline from 'readline'
 import { loadPlugins, watchPlugins } from './lib/loader.js'
 import { handleMessage } from './lib/handler.js'
 import { db, saveDB, loadDB } from './lib/database.js'
-import { cleanTmp } from './lib/utils.js'
+import { cleanTmp, fetchBuffer } from './lib/utils.js'
 import { connectSubBots } from './lib/subbots.js'
 import config from './config.js'
 
@@ -28,6 +28,25 @@ let bot = null
 let plugins = {}
 let reconnectAttempts = 0
 const MAX_RECONNECT = 10
+
+// Descarga la foto del canal y la guarda en config como base64
+// Si cambias channelJid en config, al reconectar se descarga la nueva foto automáticamente
+async function loadChannelThumb() {
+  if (!config.channelJid) return
+  try {
+    const info = await bot.getNewsletterInfo(config.channelJid)
+    const picUrl = info?.picture
+    if (picUrl) {
+      const buf = await fetchBuffer(picUrl)
+      config.channelThumb = buf.toString('base64')
+      console.log(chalk.green('[CANAL] Foto del canal cargada ✓'))
+    } else {
+      console.log(chalk.yellow('[CANAL] El canal no tiene foto'))
+    }
+  } catch (e) {
+    console.log(chalk.yellow(`[CANAL] No se pudo cargar la foto: ${e.message}`))
+  }
+}
 
 async function startBot() {
   await loadDB()
@@ -53,7 +72,6 @@ async function startBot() {
 
   plugins = await loadPlugins()
 
-  // Hot reload activo
   watchPlugins(async () => {
     plugins = await loadPlugins()
     return plugins
@@ -130,6 +148,7 @@ async function startBot() {
 
       if (config.channelJid) {
         await bot.followNewsletter(config.channelJid).catch(() => {})
+        await loadChannelThumb()
       }
 
       await connectSubBots(bot, plugins)
