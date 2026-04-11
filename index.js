@@ -32,17 +32,24 @@ const MAX_RECONNECT = 10
 async function loadChannelThumb() {
   if (!config.channelJid) return
   try {
-    // Intentar con profilePictureUrl
+    let picUrl = null
+
     if (typeof bot.profilePictureUrl === 'function') {
-      const picUrl = await bot.profilePictureUrl(config.channelJid, 'image')
-      if (picUrl) {
-        const buf = await fetchBuffer(picUrl)
-        config.channelThumb = buf.toString('base64')
-        console.log(chalk.green('[CANAL] Foto del canal cargada ✓'))
-        return
-      }
+      picUrl = await bot.profilePictureUrl(config.channelJid, 'image').catch(() => null)
     }
-    console.log(chalk.yellow('[CANAL] No se pudo obtener la foto del canal'))
+
+    // Fallback: URL manual en config
+    if (!picUrl && config.channelThumbUrl) {
+      picUrl = config.channelThumbUrl
+    }
+
+    if (picUrl) {
+      const buf = await fetchBuffer(picUrl)
+      config.channelThumb = buf.toString('base64')
+      console.log(chalk.green('[CANAL] Foto del canal cargada ✓'))
+    } else {
+      console.log(chalk.yellow('[CANAL] Sin foto de canal configurada'))
+    }
   } catch (e) {
     console.log(chalk.yellow(`[CANAL] Sin foto: ${e.message}`))
   }
