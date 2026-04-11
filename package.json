@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^6.7.16",
+    "@whiskeysockets/baileys": "github:this-xys/baileys",
     "chalk": "^5.3.0",
     "chokidar": "^3.6.0",
     "pino": "^8.19.0"
