@@ -1,7 +1,6 @@
 import config from '../../config.js'
-import { fetchBuffer } from '../../lib/utils.js'
 
-const handler = async ({ reply, args, text }) => {
+const handler = async ({ reply, text }) => {
   if (!text) {
     return reply(
       `❌ Uso: *.setchanel <link> | <nombre>*\n\n` +
@@ -11,34 +10,23 @@ const handler = async ({ reply, args, text }) => {
     )
   }
 
-  // Separar link y nombre por "|"
   const [linkPart, namePart] = text.split('|').map(s => s.trim())
 
   if (!linkPart.includes('whatsapp.com/channel/')) {
-    return reply('❌ El link debe ser de un canal de WhatsApp.\nEjemplo: .setchanel https://whatsapp.com/channel/XXXXXX | Nombre Canal')
+    return reply('❌ Link inválido. Debe ser un canal de WhatsApp.')
   }
-
-  const anteriorLink = config.channelInviteLink
-  const anteriorName = config.channelName
 
   config.channelInviteLink = linkPart
-
-  if (namePart) {
-    config.channelName = namePart
-  }
-
-  // Resetear foto para que se descargue la nueva con .seticono
+  if (namePart) config.channelName = namePart
   config.channelThumb = null
   config.channelThumbUrl = null
 
   await reply(
     `✅ *Canal actualizado*\n\n` +
-    `› Link anterior: ${anteriorLink || 'Ninguno'}\n` +
-    `› Link nuevo: ${config.channelInviteLink}\n\n` +
-    `› Nombre anterior: ${anteriorName || 'Ninguno'}\n` +
-    `› Nombre nuevo: *${config.channelName}*\n\n` +
-    `_Usa .seticono para actualizar la foto del canal_\n` +
-    `_Para que persista al reiniciar, actualiza config.js_`
+    `› Link: ${config.channelInviteLink}\n` +
+    `› Nombre: *${config.channelName}*\n\n` +
+    `⚠️ Usa *.seticono* para actualizar la foto\n` +
+    `_Para persistir, actualiza config.js_`
   )
 }
 
