@@ -1,6 +1,6 @@
-// plugins/owner/setchanel.js
 import config from '../../config.js'
 import { fetchBuffer } from '../../lib/utils.js'
+import { extractNewsletterMetadata } from '@whiskeysockets/baileys'
 
 const handler = async ({ bot, reply, text }) => {
   if (!text) {
@@ -14,49 +14,37 @@ const handler = async ({ bot, reply, text }) => {
 
   const link = text.trim()
   const channelCode = link.match(/(?:https?:\/\/)?(?:whatsapp\.com\/channel\/)([0-9A-Za-z@.]+)/i)?.[1]
-
-  if (!channelCode) {
-    return reply('❌ Link inválido. Debe ser un canal de WhatsApp.')
-  }
+  if (!channelCode) return reply('❌ Link inválido.')
 
   await reply('⏳ Obteniendo información del canal...')
 
-  // Paso 1: obtener JID con invite
-  const info = await bot.newsletterMetadata('invite', channelCode).catch(() => null)
-  if (!info?.id) return reply('❌ No se pudo obtener el JID del canal. Verifica el enlace.')
+  // Obtener node raw para poder usar extractNewsletterMetadata
+  let info
+  try {
+    info = await bot.newsletterMetadata('invite', channelCode)
+  } catch (e) {
+    return reply(`❌ Error: ${e.message}`)
+  }
 
-  // Paso 2: obtener metadata completa con JID real
-  const fullInfo = await bot.newsletterMetadata('jid', info.id).catch(() => null)
-
-  await reply(
-    `🔍 *Debug fullInfo:*\n\`\`\`${JSON.stringify({
-      id: fullInfo?.id,
-      name: fullInfo?.name,
-      description: fullInfo?.description,
-      subscriberCount: fullInfo?.subscriberCount,
-      picture: fullInfo?.picture,
-    }, null, 2).slice(0, 800)}\`\`\``
-  )
+  if (!info?.id) return reply('❌ No se pudo obtener el JID. Verifica el enlace.')
 
   const anteriorLink = config.channelInviteLink
   const anteriorName = config.channelName
 
+  // Usar los campos que sí devuelve el fork
   config.channelJid = info.id
-  config.channelName = fullInfo?.name || info?.name || config.channelName
+  config.channelName = info.name || info.thread_metadata?.name?.text || namePart || config.channelName
   config.channelInviteLink = link
   config.channelThumb = null
   config.channelThumbUrl = null
 
+  // Intentar foto
   try {
-    let picUrl = null
-
-    if (fullInfo?.picture?.directPath) {
-      picUrl = `https://mmg.whatsapp.net${fullInfo.picture.directPath}`
-    }
-
-    if (!picUrl) {
-      picUrl = await bot.profilePictureUrl(info.id, 'image').catch(() => null)
-    }
+    const picUrl = info.picture ||
+      (info.thread_metadata?.picture?.direct_path
+        ? `https://mmg.whatsapp.net${info.thread_metadata.picture.direct_path}`
+        : null) ||
+      await bot.profilePictureUrl(info.id, 'image').catch(() => null)
 
     if (picUrl) {
       const buf = await fetchBuffer(picUrl)
