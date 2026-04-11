@@ -4,27 +4,22 @@ import FormData from 'form-data'
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 import config from '../../config.js'
 
-const CDN_URL = 'https://cdn.dev-ander.xyz/upload'
-const CDN_TOKEN = '76ab5d4a4e97c41f697d47037ffe3a591d6b1cc53cd880112426df1edffeebb0'
-
 async function uploadToCDN(fileBuffer, fileName) {
   const form = new FormData()
   form.append('file', fileBuffer, { filename: fileName, contentType: 'image/jpeg' })
 
-  const res = await fetch(CDN_URL, {
+  const res = await fetch('https://api.dix.lat/upload1', {
     method: 'POST',
     headers: {
-      'x-cdn-token': CDN_TOKEN,
-      'Authorization': `Bearer ${CDN_TOKEN}`,
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json, */*',
+      'User-Agent': 'Drive-Client',
       ...form.getHeaders(),
     },
     body: form,
   })
 
-  const rawText = await res.text()
-  return { rawText, status: res.status }
+  const json = await res.json()
+  if (!json.status || !json.data) throw new Error(JSON.stringify(json))
+  return json.data
 }
 
 const handler = async ({ bot, msg, from, reply }) => {
@@ -46,12 +41,16 @@ const handler = async ({ bot, msg, from, reply }) => {
   if (!fileBuffer) return reply('❌ No se pudo descargar la imagen.')
 
   const fileName = `icono_canal_${Date.now()}.jpg`
-  const { rawText, status } = await uploadToCDN(fileBuffer, fileName)
+  const data = await uploadToCDN(fileBuffer, fileName)
 
+  config.channelThumbUrl = data.url
+  config.channelThumb = fileBuffer.toString('base64')
+
+  await bot.sendMessage(from, { react: { text: '✅', key: msg.key } })
   await reply(
-    `📡 *Respuesta CDN*\n\n` +
-    `› HTTP: ${status}\n` +
-    `› Raw:\n\`\`\`${rawText.slice(0, 500)}\`\`\``
+    `✅ *Ícono del canal actualizado*\n\n` +
+    `› URL: ${data.url}\n\n` +
+    `_Para que persista al reiniciar, guarda esta URL en config.js como channelThumbUrl_`
   )
 }
 
