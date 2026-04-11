@@ -21,16 +21,7 @@ async function uploadToCDN(fileBuffer, fileName) {
   })
 
   const rawText = await res.text()
-  await reply(`📡 Raw: \`\`\`${rawText.slice(0, 500)}\`\`\``)
-
-  let json
-  try {
-    json = JSON.parse(rawText)
-  } catch (e) {
-    throw new Error(`No es JSON (HTTP ${res.status}):\n${rawText.slice(0, 300)}`)
-  }
-
-  return json
+  return { rawText, status: res.status }
 }
 
 const handler = async ({ bot, msg, from, reply }) => {
@@ -52,9 +43,13 @@ const handler = async ({ bot, msg, from, reply }) => {
   if (!fileBuffer) return reply('❌ No se pudo descargar la imagen.')
 
   const fileName = `icono_canal_${Date.now()}.jpg`
-  const json = await uploadToCDN(fileBuffer, fileName)
+  const { rawText, status } = await uploadToCDN(fileBuffer, fileName)
 
-  await reply(`📡 *Respuesta CDN:*\n\`\`\`${JSON.stringify(json, null, 2).slice(0, 500)}\`\`\``)
+  await reply(
+    `📡 *Respuesta CDN*\n\n` +
+    `› HTTP: ${status}\n` +
+    `› Raw:\n\`\`\`${rawText.slice(0, 500)}\`\`\``
+  )
 }
 
 handler.command = ['seticono']
