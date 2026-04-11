@@ -29,22 +29,22 @@ let plugins = {}
 let reconnectAttempts = 0
 const MAX_RECONNECT = 10
 
-// Descarga la foto del canal y la guarda en config como base64
-// Si cambias channelJid en config, al reconectar se descarga la nueva foto automáticamente
 async function loadChannelThumb() {
   if (!config.channelJid) return
   try {
-    const info = await bot.getNewsletterInfo(config.channelJid)
-    const picUrl = info?.picture
-    if (picUrl) {
-      const buf = await fetchBuffer(picUrl)
-      config.channelThumb = buf.toString('base64')
-      console.log(chalk.green('[CANAL] Foto del canal cargada ✓'))
-    } else {
-      console.log(chalk.yellow('[CANAL] El canal no tiene foto'))
+    // Intentar con profilePictureUrl
+    if (typeof bot.profilePictureUrl === 'function') {
+      const picUrl = await bot.profilePictureUrl(config.channelJid, 'image')
+      if (picUrl) {
+        const buf = await fetchBuffer(picUrl)
+        config.channelThumb = buf.toString('base64')
+        console.log(chalk.green('[CANAL] Foto del canal cargada ✓'))
+        return
+      }
     }
+    console.log(chalk.yellow('[CANAL] No se pudo obtener la foto del canal'))
   } catch (e) {
-    console.log(chalk.yellow(`[CANAL] No se pudo cargar la foto: ${e.message}`))
+    console.log(chalk.yellow(`[CANAL] Sin foto: ${e.message}`))
   }
 }
 
@@ -147,7 +147,9 @@ async function startBot() {
       console.log(chalk.green(`📦 Plugins cargados: ${Object.keys(plugins).length}`))
 
       if (config.channelJid) {
-        await bot.followNewsletter(config.channelJid).catch(() => {})
+        if (typeof bot.followNewsletter === 'function') {
+          await bot.followNewsletter(config.channelJid).catch(() => {})
+        }
         await loadChannelThumb()
       }
 
