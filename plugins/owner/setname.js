@@ -1,22 +1,20 @@
-import config from '../../config.js'
-
 const handler = async ({ reply, text }) => {
   if (!text) {
     return reply(
       `❌ Uso: *.setname <nombre>*\n\n` +
-      `› Nombre actual: *${config.botName}*\n\n` +
+      `› Nombre actual: *${global._config.botName}*\n\n` +
       `Ejemplo: .setname Isagi Yoichi`
     )
   }
 
-  const anterior = config.botName
-  config.botName = text.trim()
+  const anterior = global._config.botName
+  global._config.botName = text.trim()
 
   await reply(
     `✅ *Nombre del bot actualizado*\n\n` +
     `› Anterior: ${anterior}\n` +
-    `› Nuevo: *${config.botName}*\n\n` +
-    `_Para que persista al reiniciar, guarda el nombre en config.js como botName_`
+    `› Nuevo: *${global._config.botName}*\n\n` +
+    `_Para persistir al reiniciar, actualiza config.js_`
   )
 }
 
