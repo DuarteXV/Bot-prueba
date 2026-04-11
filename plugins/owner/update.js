@@ -8,17 +8,14 @@ const handler = async ({ reply }) => {
     await reply('⏳ Verificando actualizaciones...')
 
     // Detectar rama principal
-    const { stdout: branchRaw } = await execAsync('git remote show origin | grep "HEAD branch" | cut -d" " -f5')
+    const { stdout: branchRaw } = await execAsync('git remote show origin | grep "HEAD branch" | cut -d" " -f5').catch(() => ({ stdout: 'main' }))
     const rama = branchRaw.trim() || 'main'
 
-    // Traer cambios remotos
-    await execAsync('git fetch --all')
-
-    // Comparar local vs remoto
+    // Comparar local vs remoto SIN fetch (usando lo que ya está en caché)
     const { stdout: localHash } = await execAsync('git rev-parse HEAD')
-    const { stdout: remoteHash } = await execAsync(`git rev-parse origin/${rama}`)
+    const { stdout: remoteHash } = await execAsync(`git rev-parse origin/${rama}`).catch(() => ({ stdout: '' }))
 
-    if (localHash.trim() === remoteHash.trim()) {
+    if (remoteHash.trim() && localHash.trim() === remoteHash.trim()) {
       return reply(
         `✅ *Ya estás al día*\n\n` +
         `› Rama: *${rama}*\n` +
@@ -26,12 +23,12 @@ const handler = async ({ reply }) => {
       )
     }
 
-    // Obtener lista de commits nuevos antes de aplicar
+    // Obtener commits nuevos antes de aplicar
     const { stdout: commits } = await execAsync(
       `git log HEAD..origin/${rama} --pretty=format:"› %s (%cr)" --no-merges`
-    )
+    ).catch(() => ({ stdout: '' }))
 
-    // Aplicar hard reset
+    // Hard reset directo sin fetch
     await execAsync(`git reset --hard origin/${rama}`)
 
     const { stdout: lastLog } = await execAsync('git log -1 --pretty=format:"%s (%cr)"')
