@@ -1,10 +1,10 @@
+// plugins/owner/seticono.js
 import fetch from 'node-fetch'
 import FormData from 'form-data'
 import { downloadMediaMessage } from '@whiskeysockets/baileys'
 import config from '../../config.js'
 
-const CDN_URL = 'https://api.alyacore.xyz/cdn/upload'
-const CDN_TOKEN = '76ab5d4a4e97c41f697d47037ffe3a591d6b1cc53cd880112426df1edffeebb0'
+const CDN_URL = 'https://cdn.dev-ander.xyz/upload'
 
 async function uploadToCDN(fileBuffer, fileName) {
   const form = new FormData()
@@ -13,13 +13,15 @@ async function uploadToCDN(fileBuffer, fileName) {
   const res = await fetch(CDN_URL, {
     method: 'POST',
     headers: {
-      'x-cdn-token': CDN_TOKEN,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json, */*',
       ...form.getHeaders(),
     },
     body: form,
   })
 
   const rawText = await res.text()
+  await reply(`📡 Raw: \`\`\`${rawText.slice(0, 500)}\`\`\``)
 
   let json
   try {
@@ -28,8 +30,7 @@ async function uploadToCDN(fileBuffer, fileName) {
     throw new Error(`No es JSON (HTTP ${res.status}):\n${rawText.slice(0, 300)}`)
   }
 
-  if (!json.status) throw new Error(json.message || 'Error desconocido')
-  return { data: json.data, debug: { status: res.status, raw: rawText } }
+  return json
 }
 
 const handler = async ({ bot, msg, from, reply }) => {
@@ -50,31 +51,10 @@ const handler = async ({ bot, msg, from, reply }) => {
   )
   if (!fileBuffer) return reply('❌ No se pudo descargar la imagen.')
 
-  await reply(
-    `🔍 *Debug CDN*\n\n` +
-    `› URL: ${CDN_URL}\n` +
-    `› Token: ${CDN_TOKEN.slice(0, 10)}...\n` +
-    `› Buffer: ${fileBuffer.length} bytes\n` +
-    `› Archivo: icono_canal_${Date.now()}.jpg`
-  )
+  const fileName = `icono_canal_${Date.now()}.jpg`
+  const json = await uploadToCDN(fileBuffer, fileName)
 
-  const result = await uploadToCDN(fileBuffer, `icono_canal_${Date.now()}.jpg`)
-
-  await reply(
-    `📡 *Respuesta CDN*\n\n` +
-    `› HTTP: ${result.debug.status}\n` +
-    `› Raw:\n\`\`\`${result.debug.raw.slice(0, 500)}\`\`\``
-  )
-
-  config.channelThumbUrl = result.data.url
-  config.channelThumb = fileBuffer.toString('base64')
-
-  await bot.sendMessage(from, { react: { text: '✅', key: msg.key } })
-  await reply(
-    `✅ *Ícono del canal actualizado*\n\n` +
-    `› URL: ${result.data.url}\n\n` +
-    `_Para que persista al reiniciar, guarda esta URL en config.js como channelThumbUrl_`
-  )
+  await reply(`📡 *Respuesta CDN:*\n\`\`\`${JSON.stringify(json, null, 2).slice(0, 500)}\`\`\``)
 }
 
 handler.command = ['seticono']
