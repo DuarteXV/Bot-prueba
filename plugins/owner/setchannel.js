@@ -5,57 +5,43 @@ import { fetchBuffer } from '../../lib/utils.js'
 const handler = async ({ bot, reply, text }) => {
   if (!text) {
     return reply(
-      `❌ Uso: *.setchanel <link del canal>*\n\n` +
+      `❌ Uso: *.setchanel <link> | <nombre>*\n\n` +
       `› Canal actual: ${config.channelInviteLink || 'No configurado'}\n` +
       `› Nombre actual: ${config.channelName || 'No configurado'}\n\n` +
-      `Ejemplo: .setchanel https://whatsapp.com/channel/XXXXXX`
+      `Ejemplo: .setchanel https://whatsapp.com/channel/XXXXXX | Blue Lock Club`
     )
   }
 
-  const link = text.trim()
-  const channelCode = link.match(/(?:https?:\/\/)?(?:whatsapp\.com\/channel\/)([0-9A-Za-z@.]+)/i)?.[1]
+  const [linkPart, namePart] = text.split('|').map(s => s.trim())
 
+  const channelCode = linkPart?.match(/(?:https?:\/\/)?(?:whatsapp\.com\/channel\/)([0-9A-Za-z@.]+)/i)?.[1]
   if (!channelCode) {
     return reply('❌ Link inválido. Debe ser un canal de WhatsApp.')
+  }
+
+  if (!namePart) {
+    return reply(
+      `❌ Debes incluir el nombre del canal.\n\n` +
+      `Ejemplo: .setchanel https://whatsapp.com/channel/XXXXXX | Nombre del canal`
+    )
   }
 
   await reply('⏳ Obteniendo información del canal...')
 
   const info = await bot.newsletterMetadata('invite', channelCode).catch(() => null)
-  if (!info) return reply('❌ No se pudo obtener info del canal. Verifica el enlace.')
-
-  // Debug — ver qué devuelve la API
-  await reply(
-    `🔍 *Debug info:*\n\`\`\`${JSON.stringify({
-      id: info.id,
-      name: info.name,
-      description: info.description,
-      subscriberCount: info.subscriberCount,
-      verified: info.verified,
-      picture: info.picture,
-    }, null, 2).slice(0, 800)}\`\`\``
-  )
+  if (!info?.id) return reply('❌ No se pudo obtener el JID del canal. Verifica el enlace.')
 
   const anteriorLink = config.channelInviteLink
   const anteriorName = config.channelName
 
   config.channelJid = info.id
-  config.channelName = info.name || config.channelName
-  config.channelInviteLink = link
+  config.channelName = namePart
+  config.channelInviteLink = linkPart
   config.channelThumb = null
   config.channelThumbUrl = null
 
   try {
-    let picUrl = null
-
-    if (info.picture?.directPath) {
-      picUrl = `https://mmg.whatsapp.net${info.picture.directPath}`
-    }
-
-    if (!picUrl) {
-      picUrl = await bot.profilePictureUrl(info.id, 'image').catch(() => null)
-    }
-
+    const picUrl = await bot.profilePictureUrl(info.id, 'image').catch(() => null)
     if (picUrl) {
       const buf = await fetchBuffer(picUrl)
       config.channelThumb = buf.toString('base64')
@@ -72,7 +58,7 @@ const handler = async ({ bot, reply, text }) => {
     `› Nombre nuevo: *${config.channelName}*\n` +
     `› Link anterior: ${anteriorLink || 'Ninguno'}\n` +
     `› Link nuevo: ${config.channelInviteLink}\n` +
-    `› Foto: ${config.channelThumb ? '✅ Cargada' : '❌ No disponible'}\n\n` +
+    `› Foto: ${config.channelThumb ? '✅ Cargada' : '❌ No disponible (usa .seticono)'}\n\n` +
     `_Para persistir al reiniciar, actualiza config.js_`
   )
 }
