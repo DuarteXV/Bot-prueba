@@ -22,10 +22,13 @@ ${isOwner ? `\n👑 *Owner*\n› ${prefix}ban\n› ${prefix}unban\n› ${prefix}
 
 > Prefijo: \`${prefix}\``
 
+  // Leer config en tiempo de ejecución, no al importar
+  const cfg = global._config || config
+
   await replyChannel(menu, {
-    title: config.botName,
-    body: config.channelName,
-    sourceUrl: config.channelInviteLink,
+    title: cfg.botName,
+    body: cfg.channelName,
+    sourceUrl: cfg.channelInviteLink,
   })
 }
 
