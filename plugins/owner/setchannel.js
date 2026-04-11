@@ -1,49 +1,63 @@
+// plugins/owner/setchanel.js
 import config from '../../config.js'
 import { fetchBuffer } from '../../lib/utils.js'
-import { extractNewsletterMetadata } from '@whiskeysockets/baileys'
+
+function extractChannelInfo(node) {
+  try {
+    const result = node?.content?.[0]?.content?.toString()
+    if (!result) return null
+    const parsed = JSON.parse(result)
+    const meta = parsed?.data?.xwa2_newsletter_metadata || parsed?.data?.newsletter
+    if (!meta) return null
+    const getUrl = (p) => p ? `https://mmg.whatsapp.net${p}` : ''
+    return {
+      id: meta?.id,
+      name: meta?.thread_metadata?.name?.text,
+      description: meta?.thread_metadata?.description?.text,
+      picture: getUrl(meta?.thread_metadata?.picture?.direct_path || ''),
+      subscribers: +meta?.thread_metadata?.subscribers_count,
+    }
+  } catch {
+    return null
+  }
+}
 
 const handler = async ({ bot, reply, text }) => {
   if (!text) {
     return reply(
-      `❌ Uso: *.setchanel <link del canal>*\n\n` +
+      `❌ Uso: *.setchanel <link> | <nombre>*\n\n` +
       `› Canal actual: ${config.channelInviteLink || 'No configurado'}\n` +
       `› Nombre actual: ${config.channelName || 'No configurado'}\n\n` +
-      `Ejemplo: .setchanel https://whatsapp.com/channel/XXXXXX`
+      `Ejemplo: .setchanel https://whatsapp.com/channel/XXXXXX | Blue Lock Club\n` +
+      `_El nombre es opcional si el canal lo devuelve automáticamente_`
     )
   }
 
-  const link = text.trim()
-  const channelCode = link.match(/(?:https?:\/\/)?(?:whatsapp\.com\/channel\/)([0-9A-Za-z@.]+)/i)?.[1]
-  if (!channelCode) return reply('❌ Link inválido.')
+  const [linkPart, namePart] = text.split('|').map(s => s.trim())
+
+  const channelCode = linkPart?.match(/(?:https?:\/\/)?(?:whatsapp\.com\/channel\/)([0-9A-Za-z@.]+)/i)?.[1]
+  if (!channelCode) return reply('❌ Link inválido. Debe ser un canal de WhatsApp.')
 
   await reply('⏳ Obteniendo información del canal...')
 
-  // Obtener node raw para poder usar extractNewsletterMetadata
-  let info
-  try {
-    info = await bot.newsletterMetadata('invite', channelCode)
-  } catch (e) {
-    return reply(`❌ Error: ${e.message}`)
-  }
-
+  const info = await bot.newsletterMetadata('invite', channelCode).catch(() => null)
   if (!info?.id) return reply('❌ No se pudo obtener el JID. Verifica el enlace.')
+
+  // Intentar extraer nombre y foto del node raw
+  const extracted = extractChannelInfo(info)
 
   const anteriorLink = config.channelInviteLink
   const anteriorName = config.channelName
 
-  // Usar los campos que sí devuelve el fork
   config.channelJid = info.id
-  config.channelName = info.name || info.thread_metadata?.name?.text || namePart || config.channelName
-  config.channelInviteLink = link
+  config.channelName = namePart || extracted?.name || config.channelName
+  config.channelInviteLink = linkPart
   config.channelThumb = null
   config.channelThumbUrl = null
 
   // Intentar foto
   try {
-    const picUrl = info.picture ||
-      (info.thread_metadata?.picture?.direct_path
-        ? `https://mmg.whatsapp.net${info.thread_metadata.picture.direct_path}`
-        : null) ||
+    const picUrl = extracted?.picture ||
       await bot.profilePictureUrl(info.id, 'image').catch(() => null)
 
     if (picUrl) {
