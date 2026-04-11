@@ -26,14 +26,12 @@ const handler = async ({ bot, reply, text }) => {
   const anteriorLink = config.channelInviteLink
   const anteriorName = config.channelName
 
-  // Actualizar singleton global
-  global._config.channelJid = info.id
-  global._config.channelName = info.name || config.channelName
-  global._config.channelInviteLink = link
-  global._config.channelThumb = null
-  global._config.channelThumbUrl = null
+  config.channelJid = info.id
+  config.channelName = info.name || config.channelName
+  config.channelInviteLink = link
+  config.channelThumb = null
+  config.channelThumbUrl = null
 
-  // Obtener foto
   try {
     let picUrl = null
 
@@ -47,8 +45,8 @@ const handler = async ({ bot, reply, text }) => {
 
     if (picUrl) {
       const buf = await fetchBuffer(picUrl)
-      global._config.channelThumb = buf.toString('base64')
-      global._config.channelThumbUrl = picUrl
+      config.channelThumb = buf.toString('base64')
+      config.channelThumbUrl = picUrl
     }
   } catch (e) {
     console.log('[CANAL] Sin foto:', e.message)
@@ -56,12 +54,12 @@ const handler = async ({ bot, reply, text }) => {
 
   await reply(
     `✅ *Canal actualizado*\n\n` +
-    `› JID: ${global._config.channelJid}\n` +
+    `› JID: ${config.channelJid}\n` +
     `› Nombre anterior: ${anteriorName || 'Ninguno'}\n` +
-    `› Nombre nuevo: *${global._config.channelName}*\n` +
+    `› Nombre nuevo: *${config.channelName}*\n` +
     `› Link anterior: ${anteriorLink || 'Ninguno'}\n` +
-    `› Link nuevo: ${global._config.channelInviteLink}\n` +
-    `› Foto: ${global._config.channelThumb ? '✅ Cargada' : '❌ No disponible'}\n\n` +
+    `› Link nuevo: ${config.channelInviteLink}\n` +
+    `› Foto: ${config.channelThumb ? '✅ Cargada' : '❌ No disponible'}\n\n` +
     `_Para persistir al reiniciar, actualiza config.js_`
   )
 }
