@@ -1,3 +1,4 @@
+// plugins/owner/setchanel.js
 import config from '../../config.js'
 import { fetchBuffer } from '../../lib/utils.js'
 
@@ -22,6 +23,18 @@ const handler = async ({ bot, reply, text }) => {
 
   const info = await bot.newsletterMetadata('invite', channelCode).catch(() => null)
   if (!info) return reply('❌ No se pudo obtener info del canal. Verifica el enlace.')
+
+  // Debug — ver qué devuelve la API
+  await reply(
+    `🔍 *Debug info:*\n\`\`\`${JSON.stringify({
+      id: info.id,
+      name: info.name,
+      description: info.description,
+      subscriberCount: info.subscriberCount,
+      verified: info.verified,
+      picture: info.picture,
+    }, null, 2).slice(0, 800)}\`\`\``
+  )
 
   const anteriorLink = config.channelInviteLink
   const anteriorName = config.channelName
