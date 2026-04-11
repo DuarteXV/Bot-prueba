@@ -15,35 +15,40 @@ const handler = async ({ bot, reply, text }) => {
   const channelCode = link.match(/(?:https?:\/\/)?(?:whatsapp\.com\/channel\/)([0-9A-Za-z@.]+)/i)?.[1]
 
   if (!channelCode) {
-    return reply('❌ Link inválido. Debe ser un canal de WhatsApp.\nEjemplo: https://whatsapp.com/channel/XXXXXX')
+    return reply('❌ Link inválido. Debe ser un canal de WhatsApp.')
   }
 
   await reply('⏳ Obteniendo información del canal...')
 
-  // Obtener metadata real del canal
   const info = await bot.newsletterMetadata('invite', channelCode).catch(() => null)
   if (!info) return reply('❌ No se pudo obtener info del canal. Verifica el enlace.')
 
   const anteriorLink = config.channelInviteLink
   const anteriorName = config.channelName
 
-  // Actualizar config con datos reales
-  config.channelJid = info.id
-  config.channelName = info.name || config.channelName
-  config.channelInviteLink = link
+  // Actualizar singleton global
+  global._config.channelJid = info.id
+  global._config.channelName = info.name || config.channelName
+  global._config.channelInviteLink = link
+  global._config.channelThumb = null
+  global._config.channelThumbUrl = null
 
-  // Obtener foto del canal
-  config.channelThumb = null
-  config.channelThumbUrl = null
+  // Obtener foto
   try {
-    const picUrl = info.picture?.directPath
-      ? `https://mmg.whatsapp.net${info.picture.directPath}`
-      : null
+    let picUrl = null
+
+    if (info.picture?.directPath) {
+      picUrl = `https://mmg.whatsapp.net${info.picture.directPath}`
+    }
+
+    if (!picUrl) {
+      picUrl = await bot.profilePictureUrl(info.id, 'image').catch(() => null)
+    }
+
     if (picUrl) {
       const buf = await fetchBuffer(picUrl)
-      config.channelThumb = buf.toString('base64')
-      config.channelThumbUrl = picUrl
-      console.log('[CANAL] Foto actualizada ✓')
+      global._config.channelThumb = buf.toString('base64')
+      global._config.channelThumbUrl = picUrl
     }
   } catch (e) {
     console.log('[CANAL] Sin foto:', e.message)
@@ -51,12 +56,12 @@ const handler = async ({ bot, reply, text }) => {
 
   await reply(
     `✅ *Canal actualizado*\n\n` +
-    `› JID: ${config.channelJid}\n` +
+    `› JID: ${global._config.channelJid}\n` +
     `› Nombre anterior: ${anteriorName || 'Ninguno'}\n` +
-    `› Nombre nuevo: *${config.channelName}*\n` +
+    `› Nombre nuevo: *${global._config.channelName}*\n` +
     `› Link anterior: ${anteriorLink || 'Ninguno'}\n` +
-    `› Link nuevo: ${config.channelInviteLink}\n` +
-    `› Foto: ${config.channelThumb ? '✅ Cargada' : '❌ No disponible'}\n\n` +
+    `› Link nuevo: ${global._config.channelInviteLink}\n` +
+    `› Foto: ${global._config.channelThumb ? '✅ Cargada' : '❌ No disponible'}\n\n` +
     `_Para persistir al reiniciar, actualiza config.js_`
   )
 }
