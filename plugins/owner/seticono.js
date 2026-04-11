@@ -5,6 +5,7 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys'
 import config from '../../config.js'
 
 const CDN_URL = 'https://cdn.dev-ander.xyz/upload'
+const CDN_TOKEN = '76ab5d4a4e97c41f697d47037ffe3a591d6b1cc53cd880112426df1edffeebb0'
 
 async function uploadToCDN(fileBuffer, fileName) {
   const form = new FormData()
@@ -13,6 +14,8 @@ async function uploadToCDN(fileBuffer, fileName) {
   const res = await fetch(CDN_URL, {
     method: 'POST',
     headers: {
+      'x-cdn-token': CDN_TOKEN,
+      'Authorization': `Bearer ${CDN_TOKEN}`,
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': 'application/json, */*',
       ...form.getHeaders(),
