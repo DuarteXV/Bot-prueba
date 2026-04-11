@@ -1,30 +1,33 @@
 import { exec } from 'child_process'
+import { promisify } from 'util'
 
-const handler = async ({ bot, from, reply, saveDB }) => {
-  await reply('📥 *Buscando actualizaciones en GitHub...*')
+const execAsync = promisify(exec)
 
-  exec('git pull', async (err, stdout) => {
-    if (err) {
-      return reply(`❌ *Error al actualizar:*\n\`\`\`${err.message}\`\`\``)
-    }
+const handler = async ({ reply, isOwner }) => {
+  try {
+    await reply('⏳ Actualizando repositorio...')
 
-    if (stdout.includes('Already up to date')) {
-      return reply('✅ *El bot ya está actualizado a la última versión.*')
-    }
+    // Detectar rama principal (main o master)
+    const { stdout: branch } = await execAsync('git remote show origin | grep "HEAD branch" | cut -d" " -f5')
+    const rama = branch.trim() || 'main'
 
-    await reply(`✅ *Actualización descargada:*\n\n${stdout}\n\n*Reiniciando...*`)
-    
-    await saveDB()
-    
-    setTimeout(() => {
-      process.exit(0)
-    }, 2000)
-  })
+    await execAsync(`git fetch --all`)
+    await execAsync(`git reset --hard origin/${rama}`)
+
+    const { stdout: log } = await execAsync('git log -1 --pretty=format:"%s (%cr)"')
+
+    await reply(
+      `✅ *Bot actualizado*\n\n` +
+      `› Rama: ${rama}\n` +
+      `› Último commit: ${log.trim()}`
+    )
+  } catch (e) {
+    await reply(`❌ Error al actualizar:\n\`\`\`${e.message}\`\`\``)
+  }
 }
 
 handler.command = ['update', 'actualizar']
 handler.tags = ['owner']
-handler.help = ['update - Actualiza el bot desde el repositorio']
 handler.owner = true
 
 export default handler
