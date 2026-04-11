@@ -1,4 +1,4 @@
-export default {
+const config = {
   botName: 'MyBot',
   prefix: '.',
 
@@ -16,3 +16,7 @@ export default {
   saveInterval: 5,
   rateLimit: 20,
 }
+
+// Singleton global — todos los módulos comparten la misma referencia
+if (!global._config) global._config = config
+export default global._config
