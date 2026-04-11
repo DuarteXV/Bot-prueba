@@ -1,14 +1,13 @@
-// plugins/sistema/menu.js
 import { formatDuration } from '../../lib/utils.js'
 import config from '../../config.js'
 
-const handler = async ({ bot, from, reply, isOwner, db }) => {
+const handler = async ({ from, replyChannel, isOwner, db }) => {
   const uptime = formatDuration(Date.now() - db.stats.startedAt)
   const prefix = config.prefix
 
-  const menu = `╭━━━━━━━━━━━━━━━━━━━╮
+  const menu = `╭━━━━━━━━━━━━━━━━━━━━━━━╮
 ┃   🤖 *${config.botName}*
-╰━━━━━━━━━━━━━━━━━━━╯
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 📊 *Stats*
 • Uptime: ${uptime}
@@ -23,7 +22,11 @@ ${isOwner ? `\n👑 *Owner*\n› ${prefix}ban\n› ${prefix}unban\n› ${prefix}
 
 > Prefijo: \`${prefix}\``
 
-  await reply(menu)
+  await replyChannel(menu, {
+    title: config.botName,
+    body: config.channelName,
+    sourceUrl: config.channelInviteLink,
+  })
 }
 
 handler.command = ['menu', 'help', 'start', 'h']
