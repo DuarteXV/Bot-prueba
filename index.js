@@ -12,7 +12,7 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import chalk from 'chalk'
 import readline from 'readline'
-import { loadPlugins } from './lib/loader.js'
+import { loadPlugins, watchPlugins } from './lib/loader.js'
 import { handleMessage } from './lib/handler.js'
 import { db, saveDB, loadDB } from './lib/database.js'
 import { cleanTmp } from './lib/utils.js'
@@ -53,6 +53,12 @@ async function startBot() {
 
   plugins = await loadPlugins()
 
+  // Hot reload activo
+  watchPlugins(async () => {
+    plugins = await loadPlugins()
+    return plugins
+  })
+
   bot = makeWASocket({
     version,
     logger,
@@ -73,7 +79,6 @@ async function startBot() {
     shouldIgnoreJid: (jid) => jid === 'status@broadcast',
   })
 
-  // ── SOLUCIÓN AL BUG DEL PAIRING CODE ──────────────────────────────────────
   if (usePairingCode && !state.creds.registered) {
     let phoneNumber = await question(chalk.cyan('\nIntroduce tu número (ej: 573001234567): '))
     phoneNumber = phoneNumber.replace(/[^0-9]/g, '').trim()
@@ -83,8 +88,6 @@ async function startBot() {
       process.exit(1)
     }
 
-    // Usamos un pequeño delay para que el socket se estabilice antes de pedir el código
-    // Esto evita el error de bot.ev.once
     setTimeout(async () => {
       try {
         const code = await bot.requestPairingCode(phoneNumber)
@@ -94,31 +97,27 @@ async function startBot() {
         console.log(chalk.cyan('│') + chalk.green.bold(`        ${formatted}        `) + chalk.cyan('│'))
         console.log(chalk.cyan('└──────────────────────────────┘\n'))
       } catch (e) {
-        console.error(chalk.red(`\n[ERROR PAIRING] No se pudo generar el código. Revisa si el número es correcto.`))
+        console.error(chalk.red(`\n[ERROR PAIRING] No se pudo generar el código.`))
       }
-    }, 3000) 
+    }, 3000)
   }
 
   bot.ev.on('creds.update', saveCreds)
 
   bot.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update
-
-    if (qr && !usePairingCode) {
-      console.log(chalk.yellow('[QR] Escanea el código QR para conectarte'))
-    }
+    const { connection, lastDisconnect } = update
 
     if (connection === 'close') {
       const reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-      const shouldReconnect = reason !== DisconnectReason.loggedOut
-
       console.log(chalk.red(`[DESCONECTADO] Razón: ${reason}`))
 
-      if (shouldReconnect && reconnectAttempts < MAX_RECONNECT) {
+      if (reason !== DisconnectReason.loggedOut && reconnectAttempts < MAX_RECONNECT) {
         reconnectAttempts++
         const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000)
+        console.log(chalk.yellow(`[RECONECTANDO] Intento ${reconnectAttempts} en ${delay}ms...`))
         setTimeout(startBot, delay)
       } else {
+        console.log(chalk.red('[BOT] Sesión cerrada o máximo de reconexiones alcanzado.'))
         process.exit(1)
       }
     }
@@ -128,7 +127,7 @@ async function startBot() {
       const jid = jidNormalizedUser(bot.user.id)
       console.log(chalk.green(`\n✅ Conectado como: +${jid.split('@')[0]}`))
       console.log(chalk.green(`📦 Plugins cargados: ${Object.keys(plugins).length}`))
-      
+
       if (config.channelJid) {
         await bot.followNewsletter(config.channelJid).catch(() => {})
       }
