@@ -1,33 +1,18 @@
-// config.js - Configuración central del bot
 export default {
-  // Info del bot
   botName: 'MyBot',
   prefix: '.',
 
-  // Números de owner (formato: número@s.whatsapp.net)
   ownerNumber: ['573135180876'],
 
-  // Canal de WhatsApp (newsletter JID)
-  // Formato: 120363XXXXXXXXXX@newsletter
-  channelJid: '',
+  // Canal
+  channelJid: '120363420979328566@newsletter',
+  channelName: '⏤͟͞ू⃪𝐁𝕃𝐔𝔼 𝐋𝕆𝐂𝕂 𝐂𝕃𝐔𝔹 𑁯🩵ᰍ',
+  channelInviteLink: 'https://whatsapp.com/channel/0029Vb73g1r1NCrTbefbFQ2T',
 
-  // Configuración de subbots
-  // Cada subbot es una sesión adicional que se conecta al bot principal
-  subBots: [
-    // { name: 'SubBot1', sessionPath: './sessions/sub1' },
-    // { name: 'SubBot2', sessionPath: './sessions/sub2' },
-  ],
-
-  // Carpeta temporal
+  subBots: [],
   tmpDir: './tmp',
-
-  // DB
   dbPath: './database/db.json',
   dbBackupPath: './database/backup',
-
-  // Guardar DB cada X minutos
   saveInterval: 5,
-
-  // Límite de mensajes por usuario por minuto (anti-spam)
   rateLimit: 20,
 }
