@@ -3,7 +3,6 @@ const config = {
   prefix: '.',
 
   ownerNumber: ['573135180876'],
-['50498273976'],
 
   channelJid: '120363420979328566@newsletter',
   channelName: '⏤͟͞ू⃪𝐁𝕃𝐔𝔼 𝐋𝕆𝐂𝕂 𝐂𝕃𝐔𝔹 𑁯🩵ᰍ',
