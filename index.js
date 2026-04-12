@@ -38,7 +38,6 @@ async function loadChannelThumb() {
       picUrl = await bot.profilePictureUrl(config.channelJid, 'image').catch(() => null)
     }
 
-    // Fallback: URL manual en config
     if (!picUrl && config.channelThumbUrl) {
       picUrl = config.channelThumbUrl
     }
@@ -102,6 +101,7 @@ async function startBot() {
     emitOwnEvents: false,
     fireInitQueries: false,
     shouldIgnoreJid: (jid) => jid === 'status@broadcast',
+    newsletterMetadataCacheTtlMs: 0, // 👈 caché deshabilitado
   })
 
   if (usePairingCode && !state.creds.registered) {
