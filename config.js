@@ -1,5 +1,5 @@
 const config = {
-  botName: 'MyBot',
+  botName: 'Hajime Nagumo',
   prefix: '.',
 
   ownerNumber: ['573135180876'],
