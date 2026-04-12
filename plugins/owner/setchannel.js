@@ -20,6 +20,7 @@ const handler = async ({ sock, reply, args }) => {
 
     try {
       if (thread.picture?.direct_path) {
+        await reply(`DEBUG 1: direct_path existe:\n${thread.picture.direct_path.slice(0, 80)}`)
         const buffer = await sock.downloadMediaMessage({
           message: {
             imageMessage: {
@@ -29,17 +30,16 @@ const handler = async ({ sock, reply, args }) => {
             }
           }
         })
+        await reply(`DEBUG 2: buffer tipo: ${typeof buffer} | null: ${buffer === null} | undefined: ${buffer === undefined} | length: ${buffer?.length}`)
         if (buffer) {
           global._config.channelThumb = buffer.toString('base64')
-          await reply(`DEBUG foto: ${global._config.channelThumb?.length} chars`)
-        } else {
-          await reply('DEBUG foto: buffer vació')
+          await reply(`DEBUG 3: channelThumb guardado con ${global._config.channelThumb.length} chars`)
         }
       } else {
-        await reply('DEBUG foto: no hay direct_path')
+        await reply('DEBUG: no hay direct_path en meta')
       }
     } catch (e) {
-      await reply(`⚠️ Error foto: ${e.message}`)
+      await reply(`⚠️ Error foto: ${e.message}\n${e.stack?.slice(0, 300)}`)
     }
 
     await reply(`✅ *Canal actualizado!*\n\n📛 *Nombre:* ${global._config.channelName}\n🔗 *Link:* ${global._config.channelInviteLink}`)
