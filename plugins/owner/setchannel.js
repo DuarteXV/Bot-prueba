@@ -19,12 +19,19 @@ const handler = async ({ sock, reply, args }) => {
     global._config.channelInviteLink = input
 
     try {
-      const picUrl = await sock.profilePictureUrl(meta.id, 'image')
-      const res = await fetch(picUrl)
-      if (res.ok) {
-        const buffer = Buffer.from(await res.arrayBuffer())
-        global._config.channelThumb = buffer.toString('base64')
-        global._config.channelThumbUrl = picUrl
+      if (thread.picture?.direct_path) {
+        const buffer = await sock.downloadMediaMessage({
+          message: {
+            imageMessage: {
+              directPath: thread.picture.direct_path,
+              mediaKeyTimestamp: Date.now(),
+              mimetype: 'image/jpeg'
+            }
+          }
+        })
+        if (buffer) {
+          global._config.channelThumb = buffer.toString('base64')
+        }
       }
     } catch (e) {
       await reply(`⚠️ Error foto: ${e.message}`)
