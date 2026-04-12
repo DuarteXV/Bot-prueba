@@ -1,19 +1,24 @@
-const handler = async ({ sock, reply }) => {
-  const jid = global._config.channelJid
-  if (!jid) return reply('❌ No hay channelJid configurado en config.js')
+const handler = async ({ sock, reply, args }) => {
+  const input = args[0]
+  if (!input) return reply('❌ Usa: .setchannel <link del canal>')
+
+  // Extraer el invite code del link
+  const match = input.match(/channel\/([a-zA-Z0-9_-]+)/)
+  if (!match) return reply('❌ Link inválido. Usa el link del canal de WhatsApp.')
+
+  const inviteCode = match[1]
 
   await reply('⏳ Obteniendo datos del canal...')
 
   try {
-    const meta = await sock.newsletterMetadata('jid', jid)
+    const meta = await sock.newsletterMetadata('invite', inviteCode)
     if (!meta) return reply('❌ No se pudo obtener info del canal.')
 
     const thread = meta.thread_metadata
 
+    global._config.channelJid = meta.id
     global._config.channelName = thread.name?.text || global._config.channelName
-    global._config.channelInviteLink = thread.invite
-      ? `https://whatsapp.com/channel/${thread.invite}`
-      : global._config.channelInviteLink
+    global._config.channelInviteLink = input
     global._config.channelThumbUrl = thread.picture?.direct_path
       ? `https://mmg.whatsapp.net${thread.picture.direct_path}`
       : global._config.channelThumbUrl
@@ -32,6 +37,6 @@ const handler = async ({ sock, reply }) => {
 handler.command = ['setchannel', 'setcanal']
 handler.owner = true
 handler.tags = ['owner']
-handler.help = ['setchannel']
+handler.help = ['setchannel <link>']
 
 export default handler
