@@ -18,7 +18,6 @@ const handler = async ({ sock, reply, args }) => {
     global._config.channelName = thread.name?.text || global._config.channelName
     global._config.channelInviteLink = input
 
-    // Descargar foto usando profilePictureUrl de Baileys
     try {
       const picUrl = await sock.profilePictureUrl(meta.id, 'image')
       const res = await fetch(picUrl)
@@ -27,14 +26,11 @@ const handler = async ({ sock, reply, args }) => {
         global._config.channelThumb = buffer.toString('base64')
         global._config.channelThumbUrl = picUrl
       }
-    } catch {
-      await reply('⚠️ No se pudo obtener la foto del canal.')
+    } catch (e) {
+      await reply(`⚠️ Error foto: ${e.message}`)
     }
 
-    await reply(`✅ *Canal actualizado!*
-
-📛 *Nombre:* ${global._config.channelName}
-🔗 *Link:* ${global._config.channelInviteLink}`)
+    await reply(`✅ *Canal actualizado!*\n\n📛 *Nombre:* ${global._config.channelName}\n🔗 *Link:* ${global._config.channelInviteLink}`)
 
   } catch (err) {
     await reply(`❌ Error: ${err.message}`)
