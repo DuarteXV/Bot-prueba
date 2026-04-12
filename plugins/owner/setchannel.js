@@ -31,7 +31,12 @@ const handler = async ({ sock, reply, args }) => {
         })
         if (buffer) {
           global._config.channelThumb = buffer.toString('base64')
+          await reply(`DEBUG foto: ${global._config.channelThumb?.length} chars`)
+        } else {
+          await reply('DEBUG foto: buffer vació')
         }
+      } else {
+        await reply('DEBUG foto: no hay direct_path')
       }
     } catch (e) {
       await reply(`⚠️ Error foto: ${e.message}`)
