@@ -35,8 +35,8 @@ const handler = async ({ reply }) => {
   // Procesos activos (top 5 por CPU)
   let topProcs = 'No disponible'
   try {
-    const procs = execSync("ps aux --sort=-%cpu | awk 'NR>1 && NR<=6 {printf \"%s %s%% %s\\n\", $11, $3, $6\"KB\"}'").toString().trim()
-    topProcs = procs
+    const procs = execSync("ps aux --sort=-%cpu | awk 'NR>1 && NR<=6 {printf \"%s %.1f%% %sKB\\n\", $11, $3, $6}'").toString().trim()
+    topProcs = procs.split('\n').join('\n• ')
   } catch {}
 
   // Variables de entorno relevantes
