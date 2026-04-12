@@ -32,12 +32,13 @@ const handler = async ({ reply }) => {
     diskInfo = `Total: ${disk[0]} | Usado: ${disk[1]} | Libre: ${disk[2]} (${disk[3]})`
   } catch {}
 
-  // Procesos activos (top 5 por CPU)
-  let topProcs = 'No disponible'
-  try {
-    const procs = execSync("ps aux --sort=-%cpu | awk 'NR>1 && NR<=6 {printf \"%s %.1f%% %sKB\\n\", $11, $3, $6}'").toString().trim()
-    topProcs = procs.split('\n').join('\n• ')
-  } catch {}
+  // Proceso Node.js
+  const memUsage = process.memoryUsage()
+  const topProcs = `PID: ${process.pid}
+• RSS: ${formatBytes(memUsage.rss)}
+• Heap usado: ${formatBytes(memUsage.heapUsed)}
+• Heap total: ${formatBytes(memUsage.heapTotal)}
+• External: ${formatBytes(memUsage.external)}`
 
   // Variables de entorno relevantes
   const envVars = [
@@ -80,7 +81,7 @@ const handler = async ({ reply }) => {
 💾 *Disco*
 • ${diskInfo}
 
-🔝 *Top Procesos (CPU)*
+🔝 *Proceso Node*
 • ${topProcs}
 
 🌐 *Red*
