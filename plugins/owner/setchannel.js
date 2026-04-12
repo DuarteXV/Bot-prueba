@@ -9,18 +9,24 @@ const handler = async ({ sock, reply, args }) => {
   await reply('⏳ Obteniendo datos del canal...')
 
   try {
-    const meta = await sock.newsletterMetadata('invite', inviteCode)
-    if (!meta) return reply('❌ No se pudo obtener info del canal.')
+    // Primera consulta por invite para obtener el jid
+    const metaInvite = await sock.newsletterMetadata('invite', inviteCode)
+    if (!metaInvite) return reply('❌ No se pudo obtener info del canal.')
+
+    const jid = metaInvite.id
+
+    // Segunda consulta por jid para obtener todos los datos incluyendo foto
+    const meta = await sock.newsletterMetadata('jid', jid)
+    if (!meta) return reply('❌ No se pudo obtener metadata completa.')
 
     const thread = meta.thread_metadata
 
-    global._config.channelJid = meta.id
+    global._config.channelJid = jid
     global._config.channelName = thread.name?.text || global._config.channelName
     global._config.channelInviteLink = input
 
     try {
       if (thread.picture?.direct_path) {
-        await reply(`DEBUG 1: direct_path existe:\n${thread.picture.direct_path.slice(0, 80)}`)
         const buffer = await sock.downloadMediaMessage({
           message: {
             imageMessage: {
@@ -30,16 +36,17 @@ const handler = async ({ sock, reply, args }) => {
             }
           }
         })
-        await reply(`DEBUG 2: buffer tipo: ${typeof buffer} | null: ${buffer === null} | undefined: ${buffer === undefined} | length: ${buffer?.length}`)
         if (buffer) {
           global._config.channelThumb = buffer.toString('base64')
-          await reply(`DEBUG 3: channelThumb guardado con ${global._config.channelThumb.length} chars`)
+          await reply(`DEBUG: foto guardada con ${global._config.channelThumb.length} chars`)
+        } else {
+          await reply('DEBUG: buffer vació')
         }
       } else {
-        await reply('DEBUG: no hay direct_path en meta')
+        await reply('DEBUG: sin foto')
       }
     } catch (e) {
-      await reply(`⚠️ Error foto: ${e.message}\n${e.stack?.slice(0, 300)}`)
+      await reply(`⚠️ Error foto: ${e.message}`)
     }
 
     await reply(`✅ *Canal actualizado!*\n\n📛 *Nombre:* ${global._config.channelName}\n🔗 *Link:* ${global._config.channelInviteLink}`)
