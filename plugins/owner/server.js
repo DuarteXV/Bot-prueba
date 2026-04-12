@@ -1,4 +1,5 @@
 import os from 'os'
+import { execSync } from 'child_process'
 
 const handler = async ({ reply }) => {
   const formatBytes = (bytes) => {
@@ -16,32 +17,55 @@ const handler = async ({ reply }) => {
   }
 
   const cpus = os.cpus()
-  const cpuModel = cpus[0]?.model || 'Desconocido'
+  const cpuModel = cpus[0]?.model?.trim() || 'Desconocido'
   const cpuCores = cpus.length
-
   const totalMem = os.totalmem()
   const freeMem = os.freemem()
   const usedMem = totalMem - freeMem
   const memPercent = ((usedMem / totalMem) * 100).toFixed(1)
-
-  const uptime = os.uptime()
-  const botUptime = process.uptime()
-
-  const platform = os.platform()
-  const arch = os.arch()
-  const hostname = os.hostname()
-  const nodeVersion = process.version
-
   const loadAvg = os.loadavg().map(l => l.toFixed(2)).join(' | ')
+
+  // Disco
+  let diskInfo = 'No disponible'
+  try {
+    const disk = execSync("df -h / | tail -1 | awk '{print $2, $3, $4, $5}'").toString().trim().split(' ')
+    diskInfo = `Total: ${disk[0]} | Usado: ${disk[1]} | Libre: ${disk[2]} (${disk[3]})`
+  } catch {}
+
+  // Procesos activos (top 5 por CPU)
+  let topProcs = 'No disponible'
+  try {
+    const procs = execSync("ps aux --sort=-%cpu | awk 'NR>1 && NR<=6 {printf \"%s %s%% %s\\n\", $11, $3, $6\"KB\"}'").toString().trim()
+    topProcs = procs
+  } catch {}
+
+  // Variables de entorno relevantes
+  const envVars = [
+    `NODE_ENV: ${process.env.NODE_ENV || 'no definido'}`,
+    `PORT: ${process.env.PORT || 'no definido'}`,
+    `HOME: ${process.env.HOME || 'no definido'}`,
+    `USER: ${process.env.USER || 'no definido'}`,
+  ].join('\n• ')
+
+  // Red
+  let netInfo = 'No disponible'
+  try {
+    const net = execSync("cat /proc/net/dev | awk 'NR>2 && $1!=\"lo:\" {print $1, $2, $10}' | head -3").toString().trim()
+    const lines = net.split('\n').map(line => {
+      const parts = line.trim().split(/\s+/)
+      return `${parts[0]} ↓${formatBytes(parseInt(parts[1]))} ↑${formatBytes(parseInt(parts[2]))}`
+    })
+    netInfo = lines.join('\n• ')
+  } catch {}
 
   const info = `╭━━━━━━━━━━━━━━━━━━━━━━━╮
 ┃   🖥️ *Info del Servidor*
 ╰━━━━━━━━━━━━━━━━━━━━━━━╯
 
 🔧 *Sistema*
-• OS: ${platform} (${arch})
-• Host: ${hostname}
-• Node: ${nodeVersion}
+• OS: ${os.platform()} (${os.arch()})
+• Host: ${os.hostname()}
+• Node: ${process.version}
 
 ⚙️ *CPU*
 • Modelo: ${cpuModel}
@@ -53,9 +77,21 @@ const handler = async ({ reply }) => {
 • Usada: ${formatBytes(usedMem)} (${memPercent}%)
 • Libre: ${formatBytes(freeMem)}
 
+💾 *Disco*
+• ${diskInfo}
+
+🔝 *Top Procesos (CPU)*
+• ${topProcs}
+
+🌐 *Red*
+• ${netInfo}
+
+🔑 *Variables de Entorno*
+• ${envVars}
+
 ⏱️ *Uptime*
-• Servidor: ${formatUptime(uptime)}
-• Bot: ${formatUptime(botUptime)}`
+• Servidor: ${formatUptime(os.uptime())}
+• Bot: ${formatUptime(process.uptime())}`
 
   await reply(info)
 }
