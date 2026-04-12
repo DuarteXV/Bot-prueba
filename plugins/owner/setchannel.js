@@ -13,15 +13,16 @@ const handler = async ({ sock, reply, args }) => {
     if (!metaInvite) return reply('❌ No se pudo obtener info del canal.')
 
     const jid = metaInvite.id
-    await reply(`DEBUG jid: ${jid}`)
 
-    const meta = await sock.newsletterMetadata('jid', jid)
-    const thread = meta?.thread_metadata
+    // Bypassear caché usando newsletterQuery directo
+    const result = await sock.newsletterQuery(jid, 'get', [
+      { tag: 'metadata', attrs: {} }
+    ])
 
-    await reply(`DEBUG picture: ${JSON.stringify(thread?.picture)}`)
+    await reply(`DEBUG result: ${JSON.stringify(result).slice(0, 500)}`)
 
   } catch (err) {
-    await reply(`❌ Error: ${err.message}`)
+    await reply(`❌ Error: ${err.message}\n${err.stack?.slice(0, 200)}`)
   }
 }
 
