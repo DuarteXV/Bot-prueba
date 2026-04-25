@@ -33,7 +33,7 @@ async function startMain() {
   const { version } = await fetchLatestBaileysVersion()
   const needsAuth = !state.creds?.registered
 
-  // Pide el número ANTES de crear el socket
+  // Pide número antes de crear el socket
   let phoneNumber = null
   if (needsAuth) {
     phoneNumber = await askNumber()
@@ -64,22 +64,25 @@ async function startMain() {
     },
   })
 
-  // Genera el pairing code con el socket ya listo
-  if (needsAuth && phoneNumber) {
-    await sleep(2000)
-    try {
-      const code = await sock.requestPairingCode(phoneNumber)
-      const fmt = code?.match(/.{1,4}/g)?.join("-") || code
-      console.log(`\n  ◈ Código → ${fmt}\n  ◦ WhatsApp → Dispositivos vinculados → Vincular con código\n`)
-    } catch (e) {
-      console.error("  ✗ Error generando código:", e.message)
-    }
-  }
-
   sock.ev.on("creds.update", saveCreds)
 
+  // Genera el pairing code cuando el socket está en estado "connecting"
+  // que es el único momento válido para pedirlo
+  let codeSent = false
   sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect } = update
+    const { connection, lastDisconnect, qr } = update
+
+    // Aprovecha el primer evento para generar el code (antes de "open")
+    if (!codeSent && needsAuth && phoneNumber && connection !== "open") {
+      codeSent = true
+      try {
+        const code = await sock.requestPairingCode(phoneNumber)
+        const fmt = code?.match(/.{1,4}/g)?.join("-") || code
+        console.log(`\n  ◈ Código → ${fmt}\n  ◦ WhatsApp → Dispositivos vinculados → Vincular con código\n`)
+      } catch (e) {
+        console.error("  ✗ Error generando código:", e.message)
+      }
+    }
 
     if (connection === "open") {
       console.log(`\n  ░▒▓ MALACHAR conectado ▓▒░\n  ◈ ${sock.user?.id}\n`)
@@ -114,10 +117,6 @@ function cleanTmp() {
       fs.unlinkSync(`${config.tmpFolder}/${f}`)
     )
   } catch {}
-}
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms))
 }
 
 console.log(`\n  ░▒▓ MALACHAR v${config.botVersion} ▓▒░\n`)
