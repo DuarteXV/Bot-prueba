@@ -1,7 +1,7 @@
 {
-  "name": "whatsapp-bot",
+  "name": "malachar",
   "version": "1.0.0",
-  "description": "Bot de WhatsApp con subbots, DB JSON y plugins por carpetas",
+  "description": "Malachar - Dark Gothic WhatsApp Bot",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -9,16 +9,8 @@
     "dev": "node --watch index.js"
   },
   "dependencies": {
-    "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "github:this-xys/baileys",
-    "axios": "^1.7.9",
-    "chalk": "^5.3.0",
-    "chokidar": "^3.6.0",
-    "form-data": "^4.0.0",
-    "node-fetch": "^3.3.2",
-    "pino": "^8.19.0"
-  },
-  "engines": {
-    "node": ">=20"
+    "pino": "^8.19.0",
+    "qrcode-terminal": "^0.12.0"
   }
 }
