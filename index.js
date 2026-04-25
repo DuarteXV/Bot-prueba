@@ -4,6 +4,7 @@ import {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  Browsers,
 } from "@whiskeysockets/baileys"
 import pino from "pino"
 import fs from "fs"
@@ -47,7 +48,7 @@ async function startMain() {
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
     printQRInTerminal: false,
-    browser: ["Malachar", "Chrome", "1.0.0"],
+    browser: Browsers.macOS("Safari"),
     getMessage: async () => undefined,
     shouldSyncHistoryMessage: () => false,
     syncFullHistory: false,
