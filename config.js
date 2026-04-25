@@ -1,22 +1,44 @@
 const config = {
-  botName: 'Hajime Nagumo',
-  prefix: '.',
+  // ══════════════════════════════
+  //        BOT PRINCIPAL
+  // ══════════════════════════════
+  botName: "Malachar",
+  botVersion: "1.0.0",
+  prefix: "/",
 
-  ownerNumber: ['573135180876', '50498273976'],
+  // ══════════════════════════════
+  //          OWNER
+  // ══════════════════════════════
+  owner: ["573135180876"],
+  ownerName: "Owner",
 
-  channelJid: '120363420979328566@newsletter',
-  channelName: '⏤͟͞ू⃪𝐁𝕃𝐔𝔼 𝐋𝕆𝐂𝕂 𝐂𝕃𝐔𝔹 𑁯🩵ᰍ',
-  channelInviteLink: 'https://whatsapp.com/channel/0029Vb73g1r1NCrTbefbFQ2T',
-  channelThumbUrl: 'https://raw.githubusercontent.com/DuarteXV/Yotsuba-MD-Premium/main/uploads/d528f18702dbed84.jpg',
+  // ══════════════════════════════
+  //          CANAL
+  // ══════════════════════════════
+  // Edita con /setchannel <link>
+  channelLink: "https://whatsapp.com/channel/XXXXXXXXXX",
+  channelJid: "", // se llena automático al usar /setchannel
 
-  subBots: [],
-  tmpDir: './tmp',
-  dbPath: './database/db.json',
-  dbBackupPath: './database/backup',
-  saveInterval: 5,
-  rateLimit: 20,
+  // ══════════════════════════════
+  //          MENÚ
+  // ══════════════════════════════
+  // Edita con /setbanner <imagen adjunta>
+  bannerUrl: "",
+
+  // ══════════════════════════════
+  //          SUBBOTS
+  // ══════════════════════════════
+  maxSubbots: 100,
+
+  // JID del grupo donde se permite /code
+  // Formato: 1234567890-1234567890@g.us
+  subbotGroup: "XXXXXXXXXX-XXXXXXXXXX@g.us",
+
+  // ══════════════════════════════
+  //          SESIÓN
+  // ══════════════════════════════
+  sessionFolder: "./session",
+  tmpFolder: "./tmp",
 }
 
-// Singleton global — todos los módulos comparten la misma referencia
-if (!global._config) global._config = config
-export default global._config
+export default config
