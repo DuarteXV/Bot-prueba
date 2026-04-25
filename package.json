@@ -10,7 +10,10 @@
   },
   "dependencies": {
     "@whiskeysockets/baileys": "github:this-xys/baileys",
+    "axios": "^1.6.0",
     "pino": "^8.19.0",
-    "qrcode-terminal": "^0.12.0"
+    "qrcode-terminal": "^0.12.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "jimp": "^0.22.10"
   }
 }
