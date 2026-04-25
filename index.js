@@ -34,7 +34,6 @@ async function startMain() {
   const { version } = await fetchLatestBaileysVersion()
   const needsAuth = !state.creds?.registered
 
-  // Pide número antes de crear el socket
   let phoneNumber = null
   if (needsAuth) {
     phoneNumber = await askNumber()
@@ -55,7 +54,7 @@ async function startMain() {
     markOnlineOnConnect: false,
     retryRequestDelayMs: 250,
     maxMsgRetryCount: 3,
-    connectTimeoutMs: 20_000,
+    connectTimeoutMs: 60_000,
     keepAliveIntervalMs: 15_000,
     generateHighQualityLinkPreview: false,
     patchMessageBeforeSending: (msg) => {
@@ -67,35 +66,51 @@ async function startMain() {
 
   sock.ev.on("creds.update", saveCreds)
 
-  // Genera el pairing code cuando el socket está en estado "connecting"
-  // que es el único momento válido para pedirlo
   let codeSent = false
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update
+  let authenticated = false
 
-    // Aprovecha el primer evento para generar el code (antes de "open")
-    if (!codeSent && needsAuth && phoneNumber && connection !== "open") {
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect } = update
+
+    // Genera el code una sola vez cuando el socket está conectando
+    if (!codeSent && needsAuth && phoneNumber) {
       codeSent = true
       try {
         const code = await sock.requestPairingCode(phoneNumber)
         const fmt = code?.match(/.{1,4}/g)?.join("-") || code
-        console.log(`\n  ◈ Código → ${fmt}\n  ◦ WhatsApp → Dispositivos vinculados → Vincular con código\n`)
+        console.log(`\n  ◈ Código → ${fmt}\n  ◦ WhatsApp → Dispositivos vinculados → Vincular con código\n  ◦ Tienes 60 segundos...\n`)
       } catch (e) {
         console.error("  ✗ Error generando código:", e.message)
       }
     }
 
     if (connection === "open") {
+      authenticated = true
       console.log(`\n  ░▒▓ MALACHAR conectado ▓▒░\n  ◈ ${sock.user?.id}\n`)
       cleanTmp()
       await startAllSubbots(sock)
     }
 
     if (connection === "close") {
-      const code = lastDisconnect?.error?.output?.statusCode
-      const reconnect = code !== DisconnectReason.loggedOut
-      console.log(`  ◈ Desconectado (${code}) — ${reconnect ? "reconectando..." : "sesión cerrada"}`)
-      if (reconnect) setTimeout(startMain, 3000)
+      const statusCode = lastDisconnect?.error?.output?.statusCode
+      const loggedOut = statusCode === DisconnectReason.loggedOut
+
+      // Si nunca se autenticó, no reconectar en loop — solo avisar
+      if (!authenticated) {
+        if (loggedOut) {
+          console.log("  ✗ Sesión rechazada. Borra la carpeta session/ y vuelve a intentar.")
+        }
+        // Si cerró antes de autenticar (timeout, etc) sí reconectar una vez
+        else {
+          console.log(`  ◈ Conexión cerrada antes de autenticar (${statusCode}). Reconectando...`)
+          setTimeout(startMain, 4000)
+        }
+        return
+      }
+
+      // Ya estaba autenticado — reconexión normal
+      console.log(`  ◈ Desconectado (${statusCode}) — ${!loggedOut ? "reconectando..." : "sesión cerrada"}`)
+      if (!loggedOut) setTimeout(startMain, 3000)
     }
   })
 
