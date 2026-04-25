@@ -14,16 +14,14 @@ import { startAllSubbots } from "./subbot-manager.js"
 
 const logger = pino({ level: "silent" })
 
-// ── Crea carpetas base ──────────────────────────────────────────────
 for (const dir of [config.tmpFolder, config.sessionFolder, "./subbots", "./data"]) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 }
 
-// ── Pide número por consola si no hay sesión ────────────────────────
 async function askNumber() {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    rl.question("  ◈ Número del bot (ej: 573135180876): ", (ans) => {
+    rl.question("  ◈ Número del bot: ", (ans) => {
       rl.close()
       resolve(ans.trim().replace(/\D/g, ""))
     })
@@ -34,6 +32,12 @@ async function startMain() {
   const { state, saveCreds } = await useMultiFileAuthState(config.sessionFolder)
   const { version } = await fetchLatestBaileysVersion()
   const needsAuth = !state.creds?.registered
+
+  // Pide el número ANTES de crear el socket
+  let phoneNumber = null
+  if (needsAuth) {
+    phoneNumber = await askNumber()
+  }
 
   const sock = makeWASocket({
     version,
@@ -60,14 +64,13 @@ async function startMain() {
     },
   })
 
-  // ── Pairing code del bot principal ──────────────────────────────────
-  if (needsAuth) {
-    const number = await askNumber()
+  // Genera el pairing code con el socket ya listo
+  if (needsAuth && phoneNumber) {
     await sleep(2000)
     try {
-      const code = await sock.requestPairingCode(number)
+      const code = await sock.requestPairingCode(phoneNumber)
       const fmt = code?.match(/.{1,4}/g)?.join("-") || code
-      console.log(`\n  ◈ Código → ${fmt}\n  ◦ Ingresa este código en WhatsApp → Dispositivos vinculados\n`)
+      console.log(`\n  ◈ Código → ${fmt}\n  ◦ WhatsApp → Dispositivos vinculados → Vincular con código\n`)
     } catch (e) {
       console.error("  ✗ Error generando código:", e.message)
     }
@@ -117,5 +120,5 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms))
 }
 
-console.log(`\n  ░▒▓ MALACHAR v${config.botVersion} ▓▒░\n  ◈ Solo pairing code — sin QR\n`)
+console.log(`\n  ░▒▓ MALACHAR v${config.botVersion} ▓▒░\n`)
 await startMain()
