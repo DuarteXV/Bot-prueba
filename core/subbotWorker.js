@@ -128,7 +128,7 @@ async function startWorker(_attempt = 0) {
 
   try {
     sock = makeWASocket({
-      version,
+      version: [2, 3000, 1044006379],
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, logger),
