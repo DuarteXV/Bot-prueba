@@ -1,45 +1,60 @@
 import { db } from "../../database/db.js";
 
+function cleanJid(jid = "") {
+  if (!jid) return "";
+  const atIndex = jid.lastIndexOf("@");
+  if (atIndex === -1) return jid.split(":")[0];
+  const userPart = jid.slice(0, atIndex).split(":")[0];
+  const domainPart = jid.slice(atIndex + 1);
+  return `${userPart}@${domainPart}`;
+}
+
 export default {
-  name: ['listwarn', 'warns', 'advertidos'],
-  description: 'Muestra la lista de miembros advertidos en el grupo',
+  name: ['delwarn', 'unwarn', 'quitarwarn'],
+  description: 'Quita una advertencia a un miembro del grupo',
   category: 'grupos',
   groupOnly: true,
+  adminOnly: true,
 
-  async run({ sock, from, msg, reply }) {
+  async run({ sock, from, msg, groupMeta, reply }) {
     try {
-      const groupData = db.getGroup(from) || {}
-      const groupWarns = groupData.warns || {}
-      
-      const filtrados = Object.entries(groupWarns).filter(([, lista]) => lista && lista.length > 0)
+      const participants = groupMeta?.participants || []
 
-      if (filtrados.length === 0) {
-        return await reply({ text: "🎉 ¡Excelente! No hay ningún usuario advertido en este grupo." })
+      const contextInfo = msg.message?.extendedTextMessage?.contextInfo || msg.message?.imageMessage?.contextInfo || msg.message?.videoMessage?.contextInfo
+      const mentioned = contextInfo?.mentionedJid || []
+
+      let targetRaw = contextInfo?.participantAlt || contextInfo?.participant || mentioned[0]
+      if (!targetRaw) return await reply({ text: `⚠️ Menciona o responde al usuario para quitarle una advertencia.` })
+
+      const cleanTarget = targetRaw.split(':')[0]
+      let targetJid = cleanJid(cleanTarget)
+      if (cleanTarget.endsWith('@lid')) {
+        const match = participants.find(p => p.lid === cleanTarget)
+        if (match) targetJid = cleanJid(match.id)
       }
 
-      let txt = `📋 *LISTA DE ADVERTIDOS EN ESTE GRUPO* 📋\n\n`
-      const mentions = []
+      const groupData = db.getGroup(from) || {}
+      const currentWarns = groupData.warns || {}
+      const userWarns = currentWarns[targetJid] || []
 
-      filtrados.forEach(([jid, lista], index) => {
-        mentions.push(jid)
-        const targetNum = jid.split('@')[0]
-        
-        txt += `${index + 1}. 👤 *Usuario:* @${targetNum}\n`
-        txt += `   📊 *Total Warns:* ${lista.length}/3\n`
-        txt += `   📝 *Historial:* \n`
-        lista.forEach((w) => {
-          txt += `      • [${w.fecha}] ${w.razon} (por: ${w.by})\n`
-        })
-        txt += `\n─────────────────\n\n`
-      })
+      if (userWarns.length === 0) {
+        return await sock.sendMessage(from, {
+          text: `👤 El usuario @${targetJid.split('@')[0]} no tiene advertencias activas en este grupo.`,
+          mentions: [targetJid]
+        }, { quoted: msg })
+      }
+
+      userWarns.pop()
+      currentWarns[targetJid] = userWarns
+      db.setGroup(from, { ...groupData, warns: currentWarns })
 
       await sock.sendMessage(from, {
-        text: txt.trim(),
-        mentions: mentions
+        text: `✅ Se ha removido una advertencia a @${targetJid.split('@')[0]}.\n📊 *Advertencias restantes:* ${userWarns.length}/3`,
+        mentions: [targetJid]
       }, { quoted: msg })
 
     } catch (err) {
-      console.error("Error en comando listwarn:", err)
+      console.error("Error en comando delwarn:", err)
       await reply({ text: "❌ Ocurrió un error interno al ejecutar el comando." })
     }
   }
