@@ -1,29 +1,37 @@
 import { db } from "../../database/db.js";
 
+function cleanJid(jid = "") {
+  if (!jid) return "";
+  const atIndex = jid.lastIndexOf("@");
+  if (atIndex === -1) return jid.split(":")[0];
+  const userPart = jid.slice(0, atIndex).split(":")[0];
+  const domainPart = jid.slice(atIndex + 1);
+  return `${userPart}@${domainPart}`;
+}
+
 export default {
   name: ['warn', 'advertir'],
   description: 'Advierte a un miembro del grupo',
   category: 'grupos',
   groupOnly: true,
+  adminOnly: true,
 
-  async run({ sock, from, msg, args, reply }) {
+  async run({ sock, from, msg, groupMeta, args, reply }) {
     try {
-      const groupMetaReal = await sock.groupMetadata(from)
-      const participants = groupMetaReal.participants || []
-      const cleanJid = (id) => id ? id.split('@')[0].split(':')[0] + '@s.whatsapp.net' : ''
-
-      const senderJid = cleanJid(msg.key.participant || msg.participant || from)
-      const senderParticipant = participants.find(p => cleanJid(p.id) === senderJid)
-      const isSenderAdmin = senderParticipant?.admin === 'admin' || senderParticipant?.admin === 'superadmin'
-
-      if (!isSenderAdmin) return await reply({ text: "❌ Solo admins del grupo pueden usar este comando." })
+      const participants = groupMeta?.participants || []
 
       const contextInfo = msg.message?.extendedTextMessage?.contextInfo || msg.message?.imageMessage?.contextInfo || msg.message?.videoMessage?.contextInfo
       const mentioned = contextInfo?.mentionedJid || []
-      let target = contextInfo?.participant || mentioned[0]
 
-      if (!target) return await reply({ text: `⚠️ Menciona o responde al usuario que deseas advertir.` })
-      const targetJid = cleanJid(target)
+      let targetRaw = contextInfo?.participantAlt || contextInfo?.participant || mentioned[0]
+      if (!targetRaw) return await reply({ text: `⚠️ Menciona o responde al usuario que deseas advertir.` })
+
+      const cleanTarget = targetRaw.split(':')[0]
+      let targetJid = cleanJid(cleanTarget)
+      if (cleanTarget.endsWith('@lid')) {
+        const match = participants.find(p => p.lid === cleanTarget)
+        if (match) targetJid = cleanJid(match.id)
+      }
 
       const targetParticipant = participants.find(p => cleanJid(p.id) === targetJid)
       if (targetParticipant?.admin === 'admin' || targetParticipant?.admin === 'superadmin') {
@@ -54,7 +62,7 @@ export default {
       texto += `👮‍♂️ *Por:* ${adminName}\n`
       texto += `📝 *Razón:* ${razon}\n`
       texto += `📊 *Advertencias:* ${totalWarns}/3\n\n`
-      
+
       if (totalWarns >= 3) {
         texto += `❗ *Nota:* Este usuario ha alcanzado el límite de 3 advertencias.`
       }
