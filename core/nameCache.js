@@ -8,3 +8,7 @@ export function rememberName(jid, name) {
 export function getName(jid) {
   return nameCache.get(jid);
 }
+
+export function getAllNames() {
+  return Object.fromEntries(nameCache);
+}
