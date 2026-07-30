@@ -70,7 +70,6 @@ export default {
       const nombreBot = (esLabelAutomatico || !botData?.label ? config.botName : botData.label).replace(/@\d+/g, '').trim();
       const urlFoto = botData?.banner || "https://files.evogb.win/1oU31I.jpg";
 
-      // 🛡️ Fuente de verdad única: isMain de la DB
       const esVerdaderoMain = botData?.isMain === true || botData?.isMain === 1;
       const tipoBot = esVerdaderoMain ? "Bot Principal" : "Subbot";
 
@@ -81,9 +80,6 @@ export default {
       const plugins = getPlugins()
       const categories = {}
 
-      // 🔧 FIX: iterar por plugin único (por objeto), no por cada alias.
-      // Antes recorría el Map completo (todos los alias como entradas
-      // separadas) y hacía trabajo redundante por cada alias del mismo plugin.
       const seen = new Set()
       for (const [, plugin] of plugins) {
         if (seen.has(plugin)) continue
@@ -94,7 +90,12 @@ export default {
 
         if (!categories[cat]) categories[cat] = new Set()
         const names = Array.isArray(plugin.name) ? plugin.name : [plugin.name]
-        categories[cat].add(names[0])
+
+        if (plugin.showAllNames) {
+          for (const n of names) categories[cat].add(n)
+        } else {
+          categories[cat].add(names[0])
+        }
       }
 
       let textoMenu = `*𝐇𝐨𝐥𝐚!* *@${senderNum}* soy "${nombreBot}"\n`;
