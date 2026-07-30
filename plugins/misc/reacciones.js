@@ -39,7 +39,8 @@ export default {
       // Resolver @lid usando el groupMeta que ya viene cacheado del handler
       if (who.endsWith("@lid") || isNaN(who.split("@")[0])) {
         const found = groupMeta?.participants?.find((p) => p.id === who || p.lid === who);
-        if (found?.jid) who = found.jid;
+        // 🔧 FIX: el campo del JID real en participants es "id", no "jid"
+        if (found?.id) who = found.id;
       }
 
       const authorJid = cleanJid(sender);
