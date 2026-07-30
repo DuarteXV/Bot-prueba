@@ -2,6 +2,7 @@ import config from "../config.js";
 import { log } from "./logger.js";
 import { getPlugins } from "./pluginLoader.js";
 import { db } from "../database/db.js";
+import { rememberName } from "./nameCache.js";
 
 const groupCache = new Map();
 const prefixes = Array.isArray(config.prefix) ? config.prefix : [config.prefix];
@@ -29,12 +30,20 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     if (from === "status@broadcast") return;
 
     const isGroup = from.endsWith("@g.us");
-    const senderJid = isGroup
-      ? (msg.key?.participant || msg.participant || "")
-      : from;
+
+    const participantRaw = isGroup ? (msg.key?.participant || msg.participant || "") : "";
+    const participantReal = isGroup ? (msg.key?.participantAlt || "") : "";
+
+    const senderJid = isGroup ? (participantReal || participantRaw) : from;
+    const senderLidJid = isGroup ? participantRaw : "";
 
     const sender = cleanJid(senderJid);
+    const senderLid = cleanJid(senderLidJid);
     const botJid = cleanJid(sock.user?.id || "");
+
+    // 🔧 Guardamos el nombre real del que escribe, para poder mostrarlo
+    // después aunque groupMeta.participants no traiga "notify".
+    if (msg.pushName) rememberName(sender, msg.pushName);
 
     const body =
       msg.message?.conversation ||
@@ -88,7 +97,7 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       }
 
       const primaryBot = db.getPrimary(from);
-      if (primaryBot && cmdName !== "delprimary") {
+      if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
         const myId = botJid.split("@")[0];
         if (primaryBot !== myId) return;
       }
@@ -108,8 +117,14 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       const botJidClean = cleanJid(botJid);
       const senderJidClean = cleanJid(sender);
 
-      const botParticipant = groupMeta.participants.find(p => cleanJid(p.id) === botJidClean);
-      const senderParticipant = groupMeta.participants.find(p => cleanJid(p.id) === senderJidClean);
+      const matchesParticipant = (p, targetJid, targetLid) => {
+        const pId = cleanJid(p.id);
+        const pLid = cleanJid(p.lid || "");
+        return pId === targetJid || (targetLid && pLid === targetLid) || pLid === targetJid;
+      };
+
+      const botParticipant = groupMeta.participants.find(p => matchesParticipant(p, botJidClean, ""));
+      const senderParticipant = groupMeta.participants.find(p => matchesParticipant(p, senderJidClean, senderLid));
 
       isAdmin = senderParticipant?.admin === 'admin' || senderParticipant?.admin === 'superadmin';
       isBotAdmin = botParticipant?.admin === 'admin' || botParticipant?.admin === 'superadmin';
