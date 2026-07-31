@@ -8,7 +8,7 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ from, msg, react, reply, groupMeta, sock }) {
+  async run({ from, msg, react, reply, groupMeta }) {
     const parseJid = (jid) => jid ? jid.split(':')[0].split('@')[0] : null
 
     const quoted = msg.message?.extendedTextMessage?.contextInfo || msg.message?.imageMessage?.contextInfo || msg.message?.videoMessage?.contextInfo
