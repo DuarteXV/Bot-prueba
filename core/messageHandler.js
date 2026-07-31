@@ -2,7 +2,6 @@ import config from "../config.js";
 import { log } from "./logger.js";
 import { getPlugins } from "./pluginLoader.js";
 import { db } from "../database/db.js";
-import { rememberName } from "./nameCache.js";
 
 const groupCache = new Map();
 const prefixes = Array.isArray(config.prefix) ? config.prefix : [config.prefix];
@@ -41,9 +40,9 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     const senderLid = cleanJid(senderLidJid);
     const botJid = cleanJid(sock.user?.id || "");
 
-    // 🔧 Guardamos el nombre real del que escribe, para poder mostrarlo
-    // después aunque groupMeta.participants no traiga "notify".
-    if (msg.pushName) rememberName(sender, msg.pushName);
+    // 🔧 Guardamos/actualizamos el nombre de perfil en la DB (persistente).
+    // setPushName solo escribe si cambió, así que es barato llamarlo siempre.
+    if (msg.pushName) db.setPushName(sender, msg.pushName);
 
     const body =
       msg.message?.conversation ||
@@ -130,9 +129,6 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       isBotAdmin = botParticipant?.admin === 'admin' || botParticipant?.admin === 'superadmin';
     }
 
-    // 🔒 Modo admin del grupo: si está activo, usuarios normales son
-    // ignorados en silencio (sin mensaje de error) para cualquier
-    // mensaje/comando, excepto admins del grupo, owner y coowners.
     if (isGroup) {
       const groupData = db.getGroup(from);
       if (groupData?.adminMode && !isAdmin && !isMod) {
