@@ -91,8 +91,6 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
         }
       }
 
-      // 🔧 Si "sender" sigue siendo un LID (participantAlt no vino en
-      // este mensaje), lo resolvemos cruzando contra groupMeta.participants.
       if (sender.endsWith("@lid") && groupMeta?.participants) {
         const match = groupMeta.participants.find(p => cleanJid(p.lid || "") === sender);
         if (match?.id) sender = cleanJid(match.id);
@@ -182,7 +180,10 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       clearGroupCache: () => groupCache.delete(from),
       reply: async (content) => {
         if (typeof content === "string") content = { text: content };
-        if (content.text !== undefined) content.mentions = [sender];
+        if (content.text !== undefined) {
+          const extra = content.mentions || [];
+          content.mentions = [...new Set([sender, ...extra])];
+        }
         try {
           return await sock.sendMessage(from, content, { quoted: msg });
         } catch (e1) {
