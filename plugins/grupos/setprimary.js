@@ -1,6 +1,17 @@
 import { db } from '../../database/db.js'
 import { activeBots } from '../../core/subbotManager.js'
 
+function resolveDisplay(jid, groupMeta) {
+  const num = jid.split('@')[0]
+  const participant = groupMeta?.participants?.find(
+    (p) => p.id?.split(':')[0].split('@')[0] === num || p.lid?.split('@')[0] === num
+  )
+  if (participant?.username) return `@${participant.username}`
+  const pushName = db.getPushName(jid)
+  if (pushName) return `@${pushName}`
+  return `@${num}`
+}
+
 export default {
   name: ['setprimary', 'botprincipal'],
   description: 'Establece un bot como primario del grupo',
@@ -38,14 +49,12 @@ export default {
       texto += `\n💡 Responde a un mensaje de ese bot y ejecuta *.setprimary* de nuevo.\n\n`
       texto += `⚔️ _Yuta Okotsu MD | DuarteXV_`
 
-      return await reply({
-        text: texto,
-        mentions: botsActivos.map(([, bot]) => bot.jid).filter(Boolean)
-      })
+      return await reply({ text: texto })
     }
 
     const whoNum = quotedSender
     const whoJid = `${whoNum}@s.whatsapp.net`
+    const displayName = resolveDisplay(whoJid, groupMeta)
 
     const current = db.getPrimary(from)
     if (current === whoNum) {
@@ -58,10 +67,9 @@ export default {
     await reply({
       text:
         `✅ *Bot primario establecido*\n\n` +
-        `🤖 @${whoNum} es ahora el bot principal.\n` +
+        `🤖 ${displayName} es ahora el bot principal.\n` +
         `Los demás bots no responderán en este grupo.\n\n` +
-        `⚔️ _Yuta Okotsu MD | DuarteXV_`,
-      mentions: [whoJid]
+        `⚔️ _Yuta Okotsu MD | DuarteXV_`
     })
   }
 }
