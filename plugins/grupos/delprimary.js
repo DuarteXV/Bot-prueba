@@ -1,6 +1,18 @@
 import { db } from '../../database/db.js'
 import { activeBots } from '../../core/subbotManager.js'
 
+function resolveDisplay(numOrJid, groupMeta) {
+  const num = numOrJid.split('@')[0]
+  const participant = groupMeta?.participants?.find(
+    (p) => p.id?.split(':')[0].split('@')[0] === num || p.lid?.split('@')[0] === num
+  )
+  if (participant?.username) return `@${participant.username}`
+  const jid = `${num}@s.whatsapp.net`
+  const pushName = db.getPushName(jid)
+  if (pushName) return `@${pushName}`
+  return `@${num}`
+}
+
 export default {
   name: ['delprimary', 'quitarprincipal'],
   description: 'Quita el bot primario del grupo',
@@ -8,7 +20,7 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ from, msg, react, reply, botJid }) {
+  async run({ from, msg, react, reply, botJid, groupMeta }) {
     const primary = db.getPrimary(from)
 
     if (!primary) {
@@ -31,7 +43,7 @@ export default {
        return;
     }
 
-    const primaryJid = `${primary}@s.whatsapp.net`
+    const displayName = resolveDisplay(primary, groupMeta)
 
     await react('🗑️')
     db.delPrimary(from)
@@ -39,10 +51,9 @@ export default {
     await reply({
       text:
         `✅ *Bot primario eliminado*\n\n` +
-        `🤖 El bot @${primary} ya no es el principal.\n` +
+        `🤖 El bot ${displayName} ya no es el principal.\n` +
         `Todos los bots y sub-bots responderán en este grupo ahora.\n\n` +
-        `⚔️ _Yuta Okotsu MD | DuarteXV_`,
-      mentions: [primaryJid]
+        `⚔️ _Yuta Okotsu MD | DuarteXV_`
     })
   }
 }
