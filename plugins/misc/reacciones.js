@@ -1,10 +1,10 @@
 import fs from "fs";
 import path from "path";
+import { db } from "../../database/db.js";
 
 const DATA_PATH = path.resolve(process.cwd(), "database/anime.json");
 const DATA = JSON.parse(fs.readFileSync(DATA_PATH, "utf-8"));
 
-// Quita el sufijo ":device" (ej: 5219999:0@s.whatsapp.net -> 5219999@s.whatsapp.net)
 function cleanJid(jid = "") {
   if (!jid) return "";
   const atIndex = jid.lastIndexOf("@");
@@ -20,6 +20,7 @@ export default {
   category: "anime",
   adminOnly: false,
   groupOnly: true,
+  showAllNames: true,
 
   async run({ sock, from, msg, sender, groupMeta, reply, react, cmdName }) {
     try {
@@ -36,10 +37,8 @@ export default {
         who = contextInfo.participant;
       }
 
-      // Resolver @lid usando el groupMeta que ya viene cacheado del handler
       if (who.endsWith("@lid") || isNaN(who.split("@")[0])) {
         const found = groupMeta?.participants?.find((p) => p.id === who || p.lid === who);
-        // 🔧 FIX: el campo del JID real en participants es "id", no "jid"
         if (found?.id) who = found.id;
       }
 
@@ -47,16 +46,12 @@ export default {
       const mentionedJid = cleanJid(who);
       const isSelf = mentionedJid === authorJid;
 
-      // Busca el pushname en el groupMeta ya cacheado (participants[].notify)
-      const nameFromCache = (jid) =>
-        groupMeta?.participants?.find((p) => p.id === jid)?.notify;
-
       const video = entry.videos[Math.floor(Math.random() * entry.videos.length)];
 
-      const authorName = msg.pushName || nameFromCache(authorJid) || authorJid.split("@")[0];
+      const authorName = msg.pushName || db.getPushName(authorJid) || authorJid.split("@")[0];
       const targetName = isSelf
         ? null
-        : nameFromCache(mentionedJid) || mentionedJid.split("@")[0];
+        : db.getPushName(mentionedJid) || mentionedJid.split("@")[0];
 
       const authorTag = `\`${authorName}\``;
       const targetTag = targetName ? `\`${targetName}\`` : null;
