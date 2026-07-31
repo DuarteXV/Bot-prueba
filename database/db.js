@@ -176,6 +176,20 @@ export const db = {
     stmts.updateGroup.run(JSON.stringify(group), groupJid);
   },
 
+  // 👤 NOMBRE DE PERFIL (persistente, sobrevive reinicios)
+  // Solo escribe si el nombre cambió, para no golpear la DB en cada mensaje.
+  setPushName(jid, name) {
+    if (!jid || !name) return;
+    const user = getUser(jid);
+    if (user.pushName !== name) {
+      db.setUser(jid, { pushName: name });
+    }
+  },
+
+  getPushName(jid) {
+    return getUser(jid).pushName || null;
+  },
+
   // 💰 ECONOMÍA — Fragmentos
   getEco(jid) {
     const user = getUser(jid);
