@@ -8,7 +8,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "github:this-xys/baileys",
+    "@whiskeysockets/baileys": "github:this-xys/bails",
     "axios": "^1.7.2",
     "better-sqlite3": "^12.10.1",
     "chalk": "^5.6.2",
