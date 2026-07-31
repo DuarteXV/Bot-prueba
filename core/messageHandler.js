@@ -33,16 +33,12 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     const participantRaw = isGroup ? (msg.key?.participant || msg.participant || "") : "";
     const participantReal = isGroup ? (msg.key?.participantAlt || "") : "";
 
-    const senderJid = isGroup ? (participantReal || participantRaw) : from;
+    let senderJid = isGroup ? (participantReal || participantRaw) : from;
     const senderLidJid = isGroup ? participantRaw : "";
 
-    const sender = cleanJid(senderJid);
+    let sender = cleanJid(senderJid);
     const senderLid = cleanJid(senderLidJid);
     const botJid = cleanJid(sock.user?.id || "");
-
-    // 🔧 Guardamos/actualizamos el nombre de perfil en la DB (persistente).
-    // setPushName solo escribe si cambió, así que es barato llamarlo siempre.
-    if (msg.pushName) db.setPushName(sender, msg.pushName);
 
     const body =
       msg.message?.conversation ||
@@ -95,12 +91,26 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
         }
       }
 
+      // 🔧 Si "sender" sigue siendo un LID (participantAlt no vino en
+      // este mensaje), lo resolvemos cruzando contra groupMeta.participants.
+      if (sender.endsWith("@lid") && groupMeta?.participants) {
+        const match = groupMeta.participants.find(p => cleanJid(p.lid || "") === sender);
+        if (match?.id) sender = cleanJid(match.id);
+      }
+
       const primaryBot = db.getPrimary(from);
       if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
         const myId = botJid.split("@")[0];
         if (primaryBot !== myId) return;
       }
     }
+
+    // 🐛 DEBUG TEMPORAL — quitar después de revisar la consola
+    if (isGroup) {
+      console.log(`[DEBUG pushName] sender=${sender} | pushName=${msg.pushName} | participantRaw=${participantRaw} | participantAlt=${participantReal}`);
+    }
+
+    if (msg.pushName) db.setPushName(sender, msg.pushName);
 
     const senderNum = sender.split("@")[0];
 
