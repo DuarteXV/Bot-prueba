@@ -105,11 +105,6 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       }
     }
 
-    // 🐛 DEBUG TEMPORAL — quitar después de revisar la consola
-    if (isGroup) {
-      console.log(`[DEBUG pushName] sender=${sender} | pushName=${msg.pushName} | participantRaw=${participantRaw} | participantAlt=${participantReal}`);
-    }
-
     if (msg.pushName) db.setPushName(sender, msg.pushName);
 
     const senderNum = sender.split("@")[0];
