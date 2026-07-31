@@ -1,16 +1,13 @@
 import { db } from '../../database/db.js'
 import { activeBots } from '../../core/subbotManager.js'
 
-function resolveDisplay(numOrJid, groupMeta) {
-  const num = numOrJid.split('@')[0]
-  const participant = groupMeta?.participants?.find(
-    (p) => p.id?.split(':')[0].split('@')[0] === num || p.lid?.split('@')[0] === num
-  )
-  if (participant?.username) return `@${participant.username}`
-  const jid = `${num}@s.whatsapp.net`
-  const pushName = db.getPushName(jid)
-  if (pushName) return `@${pushName}`
-  return `@${num}`
+function cleanJid(jid = "") {
+  if (!jid) return "";
+  const atIndex = jid.lastIndexOf("@");
+  if (atIndex === -1) return jid.split(":")[0];
+  const userPart = jid.slice(0, atIndex).split(":")[0];
+  const domainPart = jid.slice(atIndex + 1);
+  return `${userPart}@${domainPart}`;
 }
 
 export default {
@@ -20,7 +17,7 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ from, msg, react, reply, botJid, groupMeta }) {
+  async run({ from, msg, react, reply, botJid }) {
     const primary = db.getPrimary(from)
 
     if (!primary) {
@@ -43,7 +40,7 @@ export default {
        return;
     }
 
-    const displayName = resolveDisplay(primary, groupMeta)
+    const primaryJid = cleanJid(`${primary}@s.whatsapp.net`)
 
     await react('🗑️')
     db.delPrimary(from)
@@ -51,9 +48,10 @@ export default {
     await reply({
       text:
         `✅ *Bot primario eliminado*\n\n` +
-        `🤖 El bot ${displayName} ya no es el principal.\n` +
+        `🤖 El bot @${primary} ya no es el principal.\n` +
         `Todos los bots y sub-bots responderán en este grupo ahora.\n\n` +
-        `⚔️ _Yuta Okotsu MD | DuarteXV_`
+        `⚔️ _Yuta Okotsu MD | DuarteXV_`,
+      mentions: [primaryJid]
     })
   }
 }
