@@ -68,7 +68,7 @@ export default {
 
       const esLabelAutomatico = botData?.label?.startsWith('SUB_') || botData?.label === 'Subbot' || botData?.label === 'MAIN'
       const nombreBot = (esLabelAutomatico || !botData?.label ? config.botName : botData.label).replace(/@\d+/g, '').trim();
-      const urlFoto = botData?.banner || "https://files.evogb.win/1oU31I.jpg";
+      const urlFoto = botData?.banner || "https://cdn.dix.lat/me/f5f104cd-9fb7-4d71-82bf-04bac49f8813.jpg";
 
       const esVerdaderoMain = botData?.isMain === true || botData?.isMain === 1;
       const tipoBot = esVerdaderoMain ? "Bot Principal" : "Subbot";
