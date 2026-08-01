@@ -1,6 +1,6 @@
 # Yuta Okotsu Bot 🌿
 <p align="center">
-<img src="./assets/20260617_203730.gif" width="75%" alt="Yuta Okotsu Bot">
+<img src="./assets/ed.gif" width="75%" alt="Yuta Okotsu Bot">
 </p>
 
 > Bot de WhatsApp estético, funcional y modular, desarrollado con **Baileys**, usando **SQLite** y una arquitectura limpia para bots principales, subbots y plugins.
