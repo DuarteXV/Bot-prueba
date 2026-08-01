@@ -31,7 +31,7 @@ export default {
         for (let i = 0; i < 3; i++) {
           try {
             const res = await axios.get(api, { timeout: 30000 })
-            if (res.data?.status && res.data?.descarga?.url) {
+            if (res.data?.status && res.datos?.url) {
   data = res.data
               break
             }
@@ -42,8 +42,8 @@ export default {
 
       if (!data) return reply({ text: '❌ Error API' })
 
-      const title = data.titulo
-      const mp4 = data.descarga.url
+      const title = datos.titulo
+      const mp4 = datos.url
 
       const head = await axios.head(mp4)
       const size = Number(head.headers['content-length']) || 0
