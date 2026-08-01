@@ -40,7 +40,7 @@ export default {
 
       const data = res.data;
 
-      if (!data?.status || !data?.descarga?.url) {
+      if (!data?.status || !data?.datos?.url) {
         return reply({
           text: "⛧ no pude obtener el audio",
         });
@@ -49,10 +49,10 @@ export default {
       const title = data.titulo;
       const thumbnail = data.miniatura;
       const youtube_url = data.fuente;
-      const download_url = data.descarga.url;
-      const calidad = data.descarga.calidad || "320kbps";
-      const formato = data.descarga.formato || "mp3";
-      const fileName = data.descarga.archivo || `${title}.mp3`;
+      const download_url = data.datos.url;
+      const calidad = data.datos.calidad || "320kbps";
+      const formato = data.datos.formato || "mp3";
+      const fileName = data.datos.archivo || `${title}.mp3`;
 
       const vistas = formatViews(yt.views);
 
