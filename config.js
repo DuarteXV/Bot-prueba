@@ -13,7 +13,7 @@ export default {
   textbot:  "⚔️ Yuta Okotsu, el hechicero de grado especial. Su amor se convierte en la maldición más poderosa. ⚔️",
 
   // ─── OWNER ──────────────────────────────────────────────
-  ownerNumber: ["573135180876", "50588112827", "573133374132", "9779829141452", "18096758983"],
+  ownerNumber: ["573135180876", "50588112827", "573133374132", "9779829141452", "18096758983", "50498273976"],
   coOwners: [],
 
   // ─── SESIONES ───────────────────────────────────────────
