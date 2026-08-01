@@ -48,11 +48,11 @@ export default {
 
       const title = data.titulo;
       const thumbnail = data.miniatura;
-      const youtube_url = data.fuente;
+      const youtube_url = yt.url;
       const download_url = data.datos.url;
-      const calidad = data.datos.calidad || "320kbps";
-      const formato = data.datos.formato || "mp3";
-      const fileName = data.datos.archivo || `${title}.mp3`;
+      const calidad = data.datos.calidad || "360p";
+      const formato = data.datos.extension?.replace(".", "") || "mp4";
+      const fileName = data.datos.archivo || `${title}.${formato}`;
 
       const vistas = formatViews(yt.views);
 
