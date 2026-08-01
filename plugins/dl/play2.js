@@ -1,6 +1,8 @@
 import axios from 'axios'
 import yts from 'yt-search'
+
 const LIMIT_MB = 80
+
 export default {
   name: ['play2'],
   description: 'Descarga video de YouTube',
@@ -32,7 +34,7 @@ export default {
           try {
             const res = await axios.get(api, { timeout: 30000 })
             if (res.data?.status && res.data?.datos?.url) {
-  data = res.data
+              data = res.data
               break
             }
           } catch {}
@@ -43,7 +45,7 @@ export default {
       if (!data) return reply({ text: '❌ Error API' })
 
       const title = data.titulo
-      const mp4 = datos.url
+      const mp4 = data.datos.url
 
       const head = await axios.head(mp4)
       const size = Number(head.headers['content-length']) || 0
@@ -69,7 +71,6 @@ export default {
       }
 
       await react('✅')
-
     } catch (error) {
       await react('❌')
       await reply({ text: `❌ Error: ${error.message}` })
