@@ -177,11 +177,12 @@ pm2 logs
 
 ```txt
 Yuta-Okotsu-Bot-MD/
-├── plugins/
-├── lib/
-├── src/
+├── core/
 ├── database/
+├── plugins/
 ├── sessions/
+├── config.js/
+├── index.js/
 └── package.json
 ```
 
