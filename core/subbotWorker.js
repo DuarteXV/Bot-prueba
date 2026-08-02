@@ -2,7 +2,6 @@ import { workerData, parentPort } from "worker_threads";
 import makeWASocket, {
   DisconnectReason,
   makeCacheableSignalKeyStore,
-  fetchLatestBaileysVersion,
   initAuthCreds,
   BufferJSON,
   proto,
@@ -12,36 +11,15 @@ import { mkdir } from "fs/promises";
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
-import { handleMessage, invalidateGroupCache } from "./messageHandler.js";
+import { handleMessage } from "./messageHandler.js";
 import { loadPlugins } from "./pluginLoader.js";
 
-const { id, sessionDir, phoneNumber, mainBotNum } = workerData;
+const { id, sessionDir, phoneNumber } = workerData;
 const logger = pino({ level: "silent" });
 let pluginsLoaded = false;
 
-let activeBotsLive = [];
-let currentSock = null;
-
-parentPort.on("message", (msg) => {
-  if (msg.type === "bots_list") {
-    activeBotsLive = msg.data || [];
-  }
-
-  // 📡 El manager nos pide reaccionar a un mensaje de canal con nuestra
-  // propia conexión (currentSock). newsletterReactMessage necesita el
-  // JID real del canal (xxxx@newsletter), así que primero resolvemos
-  // el código corto de invitación a JID con newsletterMetadata.
-  if (msg.type === "react_canal" && currentSock) {
-    (async () => {
-      try {
-        const meta = await currentSock.newsletterMetadata('invite', msg.invite);
-        await currentSock.newsletterReactMessage(meta.id, msg.serverId, msg.emoji);
-      } catch {
-        // si falla para este subbot en particular, simplemente lo ignoramos
-      }
-    })();
-  }
-});
+// 🔧 Misma versión fija que el bot principal, en vez de fetchLatestBaileysVersion().
+const FIXED_WA_VERSION = [2, 3000, 1043716065];
 
 async function useSQLiteAuthState(sessionDir) {
   if (!fs.existsSync(sessionDir)) {
@@ -110,25 +88,37 @@ async function startWorker(_attempt = 0) {
   }
 
   const { state, saveCreds, closeDb } = await useSQLiteAuthState(sessionDir);
-  const { version } = await fetchLatestBaileysVersion();
+  const version = FIXED_WA_VERSION;
 
   const useCode = !!phoneNumber && !state.creds.registered;
 
   let sock;
   let connected = false;
   let pendingMessages = [];
-  let lastKnownJid = "";
+
+  const msgStore = new Map();
+  const MAX_STORE_SIZE = 500;
+
+  function cacheMessage(msg) {
+    if (!msg?.key?.id) return;
+    const cacheKey = `${msg.key.remoteJid}:${msg.key.id}`;
+    msgStore.set(cacheKey, msg);
+    if (msgStore.size > MAX_STORE_SIZE) {
+      const oldestKey = msgStore.keys().next().value;
+      msgStore.delete(oldestKey);
+    }
+  }
 
   async function flushPending() {
     const queue = pendingMessages.splice(0);
     for (const msg of queue) {
-      handleMessage(sock, msg, id.toUpperCase(), mainBotNum, activeBotsLive).catch(() => {});
+      handleMessage(sock, msg, id.toUpperCase()).catch(() => {});
     }
   }
 
   try {
     sock = makeWASocket({
-      version: [2, 3000, 1044006379],
+      version,
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, logger),
@@ -143,15 +133,20 @@ async function startWorker(_attempt = 0) {
       keepAliveIntervalMs: 25000,
       retryRequestDelayMs: 3000,
       defaultQueryTimeoutMs: 60000,
+      getMessage: async (key) => {
+        const cacheKey = `${key.remoteJid}:${key.id}`;
+        const cached = msgStore.get(cacheKey);
+        return cached?.message || undefined;
+      },
     });
-
-    currentSock = sock;
   } catch (e) {
     try { closeDb(); } catch {}
     parentPort?.postMessage({ type: "error", message: e.message });
     if (_attempt < 10) setTimeout(() => startWorker(_attempt + 1), 5000);
     return;
   }
+
+  sock.sessionDir = sessionDir;
 
   if (useCode) {
     await new Promise((r) => setTimeout(r, 3000));
@@ -167,27 +162,20 @@ async function startWorker(_attempt = 0) {
   sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
     if (connection === "open") {
       connected = true;
-      currentSock = sock;
-
       const rawJid = sock.user?.id || "";
       const jidLimpio = rawJid ? rawJid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : "";
-      lastKnownJid = jidLimpio;
-
       parentPort.postMessage({
         type: "status",
         status: "online",
         jid: jidLimpio,
       });
-
       await flushPending();
     }
 
     if (connection === "close") {
       connected = false;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
-
-      parentPort.postMessage({ type: "status", status: "offline", jid: lastKnownJid });
-
+      parentPort.postMessage({ type: "status", status: "offline", jid: "" });
       try { closeDb(); } catch {}
 
       if (statusCode === DisconnectReason.loggedOut) {
@@ -207,10 +195,6 @@ async function startWorker(_attempt = 0) {
 
   sock.ev.on("creds.update", saveCreds);
 
-  sock.ev.on("group-participants.update", ({ id: groupId }) => {
-    invalidateGroupCache(groupId);
-  });
-
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
@@ -218,12 +202,14 @@ async function startWorker(_attempt = 0) {
       if (!msg.message) continue;
       if (msg.key?.remoteJid === "status@broadcast") continue;
 
+      cacheMessage(msg);
+
       if (!connected) {
         pendingMessages.push(msg);
-        continue;
+        return;
       }
 
-      handleMessage(sock, msg, id.toUpperCase(), mainBotNum, activeBotsLive).catch(() => {});
+      handleMessage(sock, msg, id.toUpperCase()).catch(() => {});
     }
   });
 }
