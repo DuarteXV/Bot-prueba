@@ -15,9 +15,9 @@ import fs from "fs";
 import qrcode from "qrcode-terminal";
 import { log } from "./logger.js";
 import config from "../config.js";
-import { handleMessage, invalidateGroupCache } from "./messageHandler.js";
-import { getActiveBotsSnapshot } from "./subbotManager.js";
+import { handleMessage } from "./messageHandler.js";
 
+// Función auxiliar para prompts en consola
 function question(prompt) {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -31,6 +31,10 @@ function question(prompt) {
   });
 }
 
+/**
+ * Adaptación de Autenticación basada en SQLite usando better-sqlite3
+ * Guarda las credenciales de manera centralizada en un archivo auth.db dentro del sessionDir
+ */
 export async function useSQLiteAuthState(sessionDir) {
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
@@ -88,11 +92,16 @@ export async function useSQLiteAuthState(sessionDir) {
   };
 }
 
-async function clearSocketFiles(sessionDir) {
+/**
+ * Limpia los registros corruptos o temporales de la base de datos de sesión,
+ * manteniendo a salvo las credenciales principales de inicio de sesión.
+ */
+export async function clearSocketFiles(sessionDir) {
   try {
     const dbPath = path.join(sessionDir, "auth.db");
     if (fs.existsSync(dbPath)) {
       const db = new Database(dbPath);
+      // Elimina llaves previas, de remitente y estados de sincronización obsoletos
       const result = db.prepare("DELETE FROM auth WHERE id != 'creds'").run();
       if (result.changes > 0) {
         log.warn(`🗑️ Limpiados ${result.changes} registros de socket en la base de datos de [${path.basename(sessionDir)}]`);
@@ -104,6 +113,9 @@ async function clearSocketFiles(sessionDir) {
   }
 }
 
+/**
+ * Crea y gestiona la conexión con los servidores de WhatsApp.
+ */
 export async function createConnection({
   sessionDir = config.sessionDir,
   botLabel = "MAIN",
@@ -121,6 +133,7 @@ export async function createConnection({
     await new Promise((r) => setTimeout(r, delay));
   }
 
+  // Inicialización del estado de autenticación SQLite personalizado
   const { state, saveCreds } = await useSQLiteAuthState(sessionDir);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -129,19 +142,18 @@ export async function createConnection({
 
   if (!isSubbot && !state.creds.registered && _attempt === 0) {
     const choice = await question(
-      "\n  ╔══════════════════════════════════╗\n" +
-      "  ║  [1] Código de emparejamiento     ║\n" +
-      "  ║  [2] Código QR                    ║\n" +
-      "  ╚══════════════════════════════════╝\n" +
-      "  Elige (1 o 2): "
+      "\n ╔══════════════════════════════════╗\n" +
+      " ║ [1] Código de emparejamiento ║\n" +
+      " ║ [2] Código QR ║\n" +
+      " ╚══════════════════════════════════╝\n" +
+      " Elige (1 o 2): "
     );
 
     if (choice === "1") {
       useCode = true;
       let rawPhone = await question(
-        "  Digita el número de teléfono (ej: 521XXXXXXXXXX): "
+        " Digita el número de teléfono (ej: 521XXXXXXXXXX): "
       );
-
       rawPhone = rawPhone.replace(/\D/g, "");
       if (!rawPhone.startsWith("+")) rawPhone = `+${rawPhone}`;
       if (rawPhone.startsWith("+521")) {
@@ -149,7 +161,6 @@ export async function createConnection({
       } else if (rawPhone.startsWith("+52") && rawPhone[4] === "1") {
         rawPhone = rawPhone.replace("+52 1", "+52");
       }
-
       phone = rawPhone.replace(/\D/g, "");
     }
   }
@@ -158,8 +169,21 @@ export async function createConnection({
   let connectionTimeout;
   let connected = false;
   let pendingMessages = [];
-  let lastActivity = Date.now();
-  let watchdogInterval = null;
+
+  // 🔧 Caché de mensajes recientes, necesario para que WhatsApp pueda
+  // reintentar el descifrado cuando falla (evita el "esperando mensaje").
+  const msgStore = new Map();
+  const MAX_STORE_SIZE = 500;
+
+  function cacheMessage(msg) {
+    if (!msg?.key?.id) return;
+    const cacheKey = `${msg.key.remoteJid}:${msg.key.id}`;
+    msgStore.set(cacheKey, msg);
+    if (msgStore.size > MAX_STORE_SIZE) {
+      const oldestKey = msgStore.keys().next().value;
+      msgStore.delete(oldestKey);
+    }
+  }
 
   function clearConnTimeout() {
     if (connectionTimeout) {
@@ -168,32 +192,10 @@ export async function createConnection({
     }
   }
 
-  function clearWatchdog() {
-    if (watchdogInterval) {
-      clearInterval(watchdogInterval);
-      watchdogInterval = null;
-    }
-  }
-
-  function startWatchdog() {
-    clearWatchdog();
-    const UMBRAL_INACTIVIDAD = 10 * 60 * 1000;
-
-    watchdogInterval = setInterval(() => {
-      if (!connected) return;
-      const inactivo = Date.now() - lastActivity;
-      if (inactivo > UMBRAL_INACTIVIDAD) {
-        log.warn(`[${botLabel}] 🐶 Watchdog: sin actividad por ${Math.round(inactivo / 1000)}s, forzando reconexión...`);
-        clearWatchdog();
-        try { sock.end(new Error("watchdog: socket inactivo")); } catch {}
-      }
-    }, 60 * 1000);
-  }
-
   async function flushPending() {
     const queue = pendingMessages.splice(0);
     for (const { msg, label } of queue) {
-      handleMessage(sock, msg, label, null, getActiveBotsSnapshot()).catch((e) =>
+      handleMessage(sock, msg, label).catch((e) =>
         log.error(`[${label}] Error en mensaje: ${e.message}`)
       );
     }
@@ -201,7 +203,7 @@ export async function createConnection({
 
   try {
     sock = makeWASocket({
-      version: [2, 3000, 1044006379],
+      version,
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
@@ -216,6 +218,11 @@ export async function createConnection({
       keepAliveIntervalMs: 25000,
       retryRequestDelayMs: 3000,
       defaultQueryTimeoutMs: 60000,
+      getMessage: async (key) => {
+        const cacheKey = `${key.remoteJid}:${key.id}`;
+        const cached = msgStore.get(cacheKey);
+        return cached?.message || undefined;
+      },
     });
   } catch (e) {
     log.error(`[${botLabel}] Error al crear socket: ${e.message}`);
@@ -225,15 +232,19 @@ export async function createConnection({
     return;
   }
 
+  // 🔧 Guardamos la ruta de sesión en el propio socket, para que
+  // comandos como .reload puedan acceder a ella sin más contexto.
+  sock.sessionDir = sessionDir;
+
   if (useCode && !state.creds.registered) {
     await new Promise((r) => setTimeout(r, 3000));
     try {
       let code = await sock.requestPairingCode(phone, "GITHUBUG");
       code = code?.match(/.{1,4}/g)?.join("-") || code;
       console.log(
-        `\n  ┌─────────────────────────────┐\n` +
-        `  │  🔑 Tu código: ${String(code).padEnd(14)}│\n` +
-        `  └─────────────────────────────┘\n`
+        `\n ┌─────────────────────────────┐\n` +
+        ` │ 🔑 Tu código: ${String(code).padEnd(14)}│\n` +
+        ` └─────────────────────────────┘\n`
       );
     } catch (e) {
       log.error(`[${botLabel}] Error al pedir código: ${e.message}`);
@@ -260,15 +271,12 @@ export async function createConnection({
     if (connection === "open") {
       clearConnTimeout();
       connected = true;
-      lastActivity = Date.now();
-      startWatchdog();
       log.ok(`[${botLabel}] ✅ Conectado → ${sock.user?.id}`);
       await flushPending();
     }
 
     if (connection === "close") {
       clearConnTimeout();
-      clearWatchdog();
       connected = false;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const errorMsg = lastDisconnect?.error?.message || "Desconocido";
@@ -307,31 +315,23 @@ export async function createConnection({
     log.error(`[${botLabel}] WS error: ${err?.message || err}`);
   });
 
-  sock.ev.on("creds.update", () => {
-    lastActivity = Date.now();
-    saveCreds();
-  });
-
-  sock.ev.on("group-participants.update", ({ id }) => {
-    lastActivity = Date.now();
-    invalidateGroupCache(id);
-    log.info(`[${botLabel}] Cache de grupo invalidado por cambio de participantes → ${id}`);
-  });
+  sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    lastActivity = Date.now();
     if (type !== "notify") return;
 
     for (const msg of messages) {
       if (!msg.message) continue;
       if (msg.key?.remoteJid === "status@broadcast") continue;
 
+      cacheMessage(msg); // 🔧 guardar para reintentos de descifrado
+
       if (!connected) {
         pendingMessages.push({ msg, label: botLabel });
-        continue;
+        return;
       }
 
-      handleMessage(sock, msg, botLabel, null, getActiveBotsSnapshot()).catch((e) =>
+      handleMessage(sock, msg, botLabel).catch((e) =>
         log.error(`[${botLabel}] Error en mensaje: ${e.message}`)
       );
     }
