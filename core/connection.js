@@ -19,7 +19,7 @@ import { handleMessage } from "./messageHandler.js";
 // 🔧 Versión fija de WhatsApp Web, en vez de fetchLatestBaileysVersion().
 // Evita el "esperando mensaje" cuando el fork no soporta bien la última
 // versión que devuelve el endpoint de Baileys.
-const FIXED_WA_VERSION = [2, 3000, 1043716065];
+const FIXED_WA_VERSION = [2, 3000, 1035194821];
 
 // Función auxiliar para prompts en consola
 function question(prompt) {
