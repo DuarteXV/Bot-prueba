@@ -1,7 +1,6 @@
 import makeWASocket, {
   DisconnectReason,
   makeCacheableSignalKeyStore,
-  fetchLatestBaileysVersion,
   initAuthCreds,
   BufferJSON,
   proto,
@@ -16,6 +15,11 @@ import qrcode from "qrcode-terminal";
 import { log } from "./logger.js";
 import config from "../config.js";
 import { handleMessage } from "./messageHandler.js";
+
+// 🔧 Versión fija de WhatsApp Web, en vez de fetchLatestBaileysVersion().
+// Evita el "esperando mensaje" cuando el fork no soporta bien la última
+// versión que devuelve el endpoint de Baileys.
+const FIXED_WA_VERSION = [2, 3000, 1043716065];
 
 // Función auxiliar para prompts en consola
 function question(prompt) {
@@ -101,7 +105,6 @@ export async function clearSocketFiles(sessionDir) {
     const dbPath = path.join(sessionDir, "auth.db");
     if (fs.existsSync(dbPath)) {
       const db = new Database(dbPath);
-      // Elimina llaves previas, de remitente y estados de sincronización obsoletos
       const result = db.prepare("DELETE FROM auth WHERE id != 'creds'").run();
       if (result.changes > 0) {
         log.warn(`🗑️ Limpiados ${result.changes} registros de socket en la base de datos de [${path.basename(sessionDir)}]`);
@@ -133,9 +136,8 @@ export async function createConnection({
     await new Promise((r) => setTimeout(r, delay));
   }
 
-  // Inicialización del estado de autenticación SQLite personalizado
   const { state, saveCreds } = await useSQLiteAuthState(sessionDir);
-  const { version } = await fetchLatestBaileysVersion();
+  const version = FIXED_WA_VERSION;
 
   let useCode = false;
   let phone = phoneNumber;
@@ -170,8 +172,6 @@ export async function createConnection({
   let connected = false;
   let pendingMessages = [];
 
-  // 🔧 Caché de mensajes recientes, necesario para que WhatsApp pueda
-  // reintentar el descifrado cuando falla (evita el "esperando mensaje").
   const msgStore = new Map();
   const MAX_STORE_SIZE = 500;
 
@@ -232,8 +232,6 @@ export async function createConnection({
     return;
   }
 
-  // 🔧 Guardamos la ruta de sesión en el propio socket, para que
-  // comandos como .reload puedan acceder a ella sin más contexto.
   sock.sessionDir = sessionDir;
 
   if (useCode && !state.creds.registered) {
@@ -324,7 +322,7 @@ export async function createConnection({
       if (!msg.message) continue;
       if (msg.key?.remoteJid === "status@broadcast") continue;
 
-      cacheMessage(msg); // 🔧 guardar para reintentos de descifrado
+      cacheMessage(msg);
 
       if (!connected) {
         pendingMessages.push({ msg, label: botLabel });
