@@ -19,7 +19,7 @@ const logger = pino({ level: "silent" });
 let pluginsLoaded = false;
 
 // 🔧 Misma versión fija que el bot principal, en vez de fetchLatestBaileysVersion().
-const FIXED_WA_VERSION = [2, 3000, 1043716065];
+const FIXED_WA_VERSION = [2, 3000, 1035194821];
 
 async function useSQLiteAuthState(sessionDir) {
   if (!fs.existsSync(sessionDir)) {
