@@ -117,15 +117,31 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
 
     if (isGroup && groupMeta?.participants) {
       const botJidClean = cleanJid(botJid);
+
+      // 🔧 FIX LID: en grupos totalmente migrados a LID, el bot (y todos)
+      // solo tienen "id" como LID, sin ningún campo "lid" aparte. Resolvemos
+      // el LID real del bot en vivo con signalRepository, para poder
+      // encontrarlo en la lista de participantes sin importar el formato.
+      let botLidClean = "";
+      try {
+        const resolvedBotLid = await sock.signalRepository?.lidMapping?.getLIDForPN(botJidClean);
+        if (resolvedBotLid) botLidClean = cleanJid(resolvedBotLid);
+      } catch {}
+
       const senderJidClean = cleanJid(sender);
 
       const matchesParticipant = (p, targetJid, targetLid) => {
         const pId = cleanJid(p.id);
         const pLid = cleanJid(p.lid || "");
-        return pId === targetJid || (targetLid && pLid === targetLid) || pLid === targetJid;
+        return (
+          pId === targetJid ||
+          (targetLid && pId === targetLid) ||
+          (targetLid && pLid === targetLid) ||
+          pLid === targetJid
+        );
       };
 
-      const botParticipant = groupMeta.participants.find(p => matchesParticipant(p, botJidClean, ""));
+      const botParticipant = groupMeta.participants.find(p => matchesParticipant(p, botJidClean, botLidClean));
       const senderParticipant = groupMeta.participants.find(p => matchesParticipant(p, senderJidClean, senderLid));
 
       isAdmin = senderParticipant?.admin === 'admin' || senderParticipant?.admin === 'superadmin';
