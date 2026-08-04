@@ -21,6 +21,25 @@ function cleanJid(jid = "") {
   return `${userPart}@${domainPart}`;
 }
 
+// 🔧 Resuelve un LID a número real, probando primero con los datos
+// estáticos del grupo, y si no alcanza, en vivo con signalRepository
+// (necesario en grupos 100% migrados a LID, donde no hay p.lid aparte).
+async function resolveLid(lidJid, groupMeta, sock) {
+  if (!lidJid || !lidJid.endsWith("@lid")) return lidJid;
+
+  const match = groupMeta?.participants?.find((p) => cleanJid(p.lid || "") === lidJid);
+  if (match?.id && !match.id.endsWith("@lid")) {
+    return cleanJid(match.id);
+  }
+
+  try {
+    const resolved = await sock.signalRepository?.lidMapping?.getPNForLID(lidJid);
+    if (resolved) return cleanJid(resolved);
+  } catch {}
+
+  return lidJid; // no se pudo resolver, se queda como LID
+}
+
 export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum = null, activeBotsLive = []) {
   try {
     const msg = rawMsg;
@@ -91,9 +110,9 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
         }
       }
 
-      if (sender.endsWith("@lid") && groupMeta?.participants) {
-        const match = groupMeta.participants.find(p => cleanJid(p.lid || "") === sender);
-        if (match?.id) sender = cleanJid(match.id);
+      // 🔧 Resolver el LID del sender, con fallback en vivo si hace falta
+      if (sender.endsWith("@lid")) {
+        sender = await resolveLid(sender, groupMeta, sock);
       }
 
       const primaryBot = db.getPrimary(from);
@@ -118,10 +137,6 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     if (isGroup && groupMeta?.participants) {
       const botJidClean = cleanJid(botJid);
 
-      // 🔧 FIX LID: en grupos totalmente migrados a LID, el bot (y todos)
-      // solo tienen "id" como LID, sin ningún campo "lid" aparte. Resolvemos
-      // el LID real del bot en vivo con signalRepository, para poder
-      // encontrarlo en la lista de participantes sin importar el formato.
       let botLidClean = "";
       try {
         const resolvedBotLid = await sock.signalRepository?.lidMapping?.getLIDForPN(botJidClean);
@@ -193,6 +208,7 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       isPremium,
       isAdmin,
       isBotAdmin,
+      resolveLid: (lidJid) => resolveLid(lidJid, groupMeta, sock), // 🔧 disponible para los plugins
       clearGroupCache: () => groupCache.delete(from),
       reply: async (content) => {
         if (typeof content === "string") content = { text: content };
