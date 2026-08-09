@@ -1,7 +1,7 @@
 import { db } from '../../database/db.js'
 
 const ITEMS = {
-  pala: { nombre: '🪓 Pala', precio: 500 },
+  pala: { nombre: '🪏 Pala', precio: 500 },
   pico: { nombre: '⛏️ Pico', precio: 1200 },
   katana_maldita: { nombre: '🗡️ Katana maldita', precio: 3000 },
   cristal_dominio: { nombre: '💎 Cristal de dominio', precio: 8000 },
