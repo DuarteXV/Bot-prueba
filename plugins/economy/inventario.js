@@ -1,7 +1,7 @@
 import { db } from '../../database/db.js'
 
 const ITEMS_INFO = {
-  pala: { nombre: '🪓 Pala', bonus: 50 },
+  pala: { nombre: '🪏 Pala', bonus: 50 },
   pico: { nombre: '⛏️ Pico', bonus: 120 },
   katana_maldita: { nombre: '🗡️ Katana maldita', bonus: 300 },
   cristal_dominio: { nombre: '💎 Cristal de dominio', bonus: 600 },
