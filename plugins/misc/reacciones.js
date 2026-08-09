@@ -14,6 +14,19 @@ function cleanJid(jid = "") {
   return `${userPart}@${domainPart}`;
 }
 
+function resolveDisplayName(jid, groupMeta) {
+  const cached = db.getPushName(jid);
+  if (cached) return cached;
+
+  const num = jid.split("@")[0];
+  const participant = groupMeta?.participants?.find(
+    (p) => cleanJid(p.id).split("@")[0] === num || cleanJid(p.lid || "").split("@")[0] === num
+  );
+  if (participant?.username) return `@${participant.username}`;
+
+  return num;
+}
+
 export default {
   name: Object.keys(DATA),
   description: "Reacciones anime: .hug @user, .kiss @user, etc.",
@@ -22,7 +35,7 @@ export default {
   groupOnly: true,
   showAllNames: true,
 
-  async run({ sock, from, msg, sender, groupMeta, reply, react, cmdName }) {
+  async run({ sock, from, msg, sender, groupMeta, reply, react, cmdName, resolveLid }) {
     try {
       const category = (cmdName || "").toLowerCase();
       const entry = DATA[category];
@@ -37,9 +50,17 @@ export default {
         who = contextInfo.participant;
       }
 
+      // 🔧 Resolver el LID: primero con groupMeta (id o lid), y si
+      // sigue siendo LID, en vivo con signalRepository (grupos 100%
+      // migrados a LID donde no hay campo "lid" aparte).
       if (who.endsWith("@lid") || isNaN(who.split("@")[0])) {
         const found = groupMeta?.participants?.find((p) => p.id === who || p.lid === who);
-        if (found?.id) who = found.id;
+        if (found?.id && !found.id.endsWith("@lid")) {
+          who = found.id;
+        } else if (who.endsWith("@lid")) {
+          const resolved = await resolveLid(who);
+          if (resolved && resolved !== who) who = resolved;
+        }
       }
 
       const authorJid = cleanJid(sender);
@@ -48,10 +69,8 @@ export default {
 
       const video = entry.videos[Math.floor(Math.random() * entry.videos.length)];
 
-      const authorName = msg.pushName || db.getPushName(authorJid) || authorJid.split("@")[0];
-      const targetName = isSelf
-        ? null
-        : db.getPushName(mentionedJid) || mentionedJid.split("@")[0];
+      const authorName = msg.pushName || resolveDisplayName(authorJid, groupMeta);
+      const targetName = isSelf ? null : resolveDisplayName(mentionedJid, groupMeta);
 
       const authorTag = `\`${authorName}\``;
       const targetTag = targetName ? `\`${targetName}\`` : null;
