@@ -57,7 +57,7 @@ export default {
   category: "info",
   ownerOnly: false,
 
-  async run({ sock, from, senderNum, isGroup, groupName, usedPrefix, msg }) {
+  async run({ sock, from, sender, senderNum, isGroup, groupName, usedPrefix, msg }) {
     try {
       const lugar = isGroup ? groupName : "Chat Privado";
 
@@ -162,7 +162,11 @@ export default {
           thumbnailWidth: imgBanner.width || 1920,
           inviteLinkGroupTypeV2: 0,
           contextInfo: {
-            mentionedJid: [`${senderNum}@s.whatsapp.net`],
+            // 🔧 FIX LID: usar "sender" (ya resuelto por messageHandler.js,
+            // con fallback en vivo) en vez de reconstruir el JID a mano
+            // con "${senderNum}@s.whatsapp.net", que rompía cuando
+            // senderNum eran dígitos de un LID no resuelto.
+            mentionedJid: [sender],
             isForwarded: true,
             forwardingScore: 1,
             forwardedNewsletterMessageInfo: {
