@@ -9,7 +9,7 @@ export default {
     await reply({
       text: `🛒 *Tienda de Fragmentos*\n` +
         `╰━━━━━━(☆)━━━━━━─╮\n\n` +
-        `*🪓 Pala*\n` +
+        `*🪏 Pala*\n` +
         `   💰 Precio: 500 Fragmentos\n` +
         `   ⚡ Bonus: +50 Fragmentos por trabajo\n` +
         `   🆔 ID: \`pala\`\n\n` +
