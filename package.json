@@ -8,7 +8,7 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "github:this-xys/WaSoscket",
+    "@whiskeysockets/baileys": "github:this-xys/WaSocket",
     "axios": "^1.7.2",
     "better-sqlite3": "^11.10.0",
     "chalk": "^5.6.2",
