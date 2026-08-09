@@ -21,9 +21,6 @@ function cleanJid(jid = "") {
   return `${userPart}@${domainPart}`;
 }
 
-// 🔧 Resuelve un LID a número real, probando primero con los datos
-// estáticos del grupo, y si no alcanza, en vivo con signalRepository
-// (necesario en grupos 100% migrados a LID, donde no hay p.lid aparte).
 async function resolveLid(lidJid, groupMeta, sock) {
   if (!lidJid || !lidJid.endsWith("@lid")) return lidJid;
 
@@ -37,7 +34,26 @@ async function resolveLid(lidJid, groupMeta, sock) {
     if (resolved) return cleanJid(resolved);
   } catch {}
 
-  return lidJid; // no se pudo resolver, se queda como LID
+  return lidJid;
+}
+
+// 🔧 Chequeo robusto de owner/coowner: si el número real ya coincide,
+// listo. Si no (porque el sender llegó como LID sin resolver), intenta
+// al revés — resuelve el LID actual del owner/coowner conocido y lo
+// compara contra el LID crudo que llegó en el mensaje.
+async function matchesConfiguredNumber(numberList, senderNum, rawLid, sock) {
+  if (numberList.includes(senderNum)) return true;
+
+  if (rawLid && rawLid.endsWith("@lid")) {
+    for (const num of numberList) {
+      try {
+        const lid = await sock.signalRepository?.lidMapping?.getLIDForPN(`${num}@s.whatsapp.net`);
+        if (lid && cleanJid(lid) === rawLid) return true;
+      } catch {}
+    }
+  }
+
+  return false;
 }
 
 export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum = null, activeBotsLive = []) {
@@ -110,11 +126,6 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
         }
       }
 
-      // 🔧 Resolver el LID del sender, con fallback en vivo si hace falta
-      if (sender.endsWith("@lid")) {
-        sender = await resolveLid(sender, groupMeta, sock);
-      }
-
       const primaryBot = db.getPrimary(from);
       if (primaryBot && cmdName !== "delprimary" && cmdName !== "setprimary") {
         const myId = botJid.split("@")[0];
@@ -122,12 +133,20 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       }
     }
 
+    // Guardamos el LID crudo original (antes de resolver) para el
+    // chequeo de owner por si la resolución normal falla.
+    const rawSenderLid = sender.endsWith("@lid") ? sender : (senderLid || "");
+
+    if (sender.endsWith("@lid")) {
+      sender = await resolveLid(sender, groupMeta, sock);
+    }
+
     if (msg.pushName) db.setPushName(sender, msg.pushName);
 
     const senderNum = sender.split("@")[0];
 
-    const isOwner = config.ownerNumber.includes(senderNum);
-    const isCoOwner = config.coOwners.includes(senderNum);
+    const isOwner = await matchesConfiguredNumber(config.ownerNumber, senderNum, rawSenderLid, sock);
+    const isCoOwner = await matchesConfiguredNumber(config.coOwners, senderNum, rawSenderLid, sock);
     const isMod = isOwner || isCoOwner || db.hasRole(senderNum, "mod");
     const isPremium = isMod || db.hasRole(senderNum, "premium");
 
@@ -208,7 +227,7 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       isPremium,
       isAdmin,
       isBotAdmin,
-      resolveLid: (lidJid) => resolveLid(lidJid, groupMeta, sock), // 🔧 disponible para los plugins
+      resolveLid: (lidJid) => resolveLid(lidJid, groupMeta, sock),
       clearGroupCache: () => groupCache.delete(from),
       reply: async (content) => {
         if (typeof content === "string") content = { text: content };
