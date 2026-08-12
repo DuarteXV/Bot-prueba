@@ -7,27 +7,33 @@ export default {
   ownerOnly: false,
 
   async run({ sock, from, msg, reply }) {
-    const quoted =
-      msg?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    const contextInfo =
+      msg.message?.extendedTextMessage?.contextInfo ||
+      msg.message?.imageMessage?.contextInfo ||
+      msg.message?.videoMessage?.contextInfo;
 
-    if (!quoted) {
+    const quotedMessage = contextInfo?.quotedMessage;
+
+    if (!quotedMessage) {
       return reply({
         text: "Responde a un mensaje ViewOnce."
       });
     }
 
     const message =
-      quoted.viewOnceMessageV2?.message ||
-      quoted.viewOnceMessage?.message ||
-      quoted;
+      quotedMessage.viewOnceMessageV2?.message ||
+      quotedMessage.viewOnceMessage?.message ||
+      quotedMessage.viewOnceMessageV2Extension?.message ||
+      quotedMessage;
 
-    const isViewOnce =
-      quoted.viewOnceMessageV2 ||
-      quoted.viewOnceMessage ||
-      message?.viewOnceMessageV2 ||
-      message?.viewOnceMessage;
+    const media =
+      message.imageMessage ||
+      message.videoMessage ||
+      message.audioMessage ||
+      message.documentMessage ||
+      message.stickerMessage;
 
-    if (!isViewOnce) {
+    if (!media) {
       return reply({
         text: "Responde a un mensaje ViewOnce."
       });
@@ -41,66 +47,43 @@ export default {
     });
 
     try {
-      let type;
-      let media;
-      let caption = "";
-
-      if (message.imageMessage) {
-        type = "imageMessage";
-        media = message.imageMessage;
-        caption = media.caption || "";
-      } else if (message.videoMessage) {
-        type = "videoMessage";
-        media = message.videoMessage;
-        caption = media.caption || "";
-      } else if (message.audioMessage) {
-        type = "audioMessage";
-        media = message.audioMessage;
-      } else if (message.documentMessage) {
-        type = "documentMessage";
-        media = message.documentMessage;
-        caption = media.caption || "";
-      } else if (message.stickerMessage) {
-        type = "stickerMessage";
-        media = message.stickerMessage;
-      } else {
-        throw new Error("Tipo de archivo no soportado");
-      }
-
       const buffer = await downloadMediaMessage(
         {
-          key: msg.key,
-          message: {
-            [type]: media
-          }
+          key: {
+            remoteJid: from,
+            id: contextInfo.stanzaId,
+            participant: contextInfo.participant
+          },
+          message: quotedMessage
         },
         "buffer",
         {}
       );
 
-      if (type === "imageMessage") {
+      if (message.imageMessage) {
         await sock.sendMessage(from, {
           image: buffer,
-          caption
+          caption: message.imageMessage.caption || ""
         });
-      } else if (type === "videoMessage") {
+      } else if (message.videoMessage) {
         await sock.sendMessage(from, {
           video: buffer,
-          caption
+          caption: message.videoMessage.caption || ""
         });
-      } else if (type === "audioMessage") {
+      } else if (message.audioMessage) {
         await sock.sendMessage(from, {
           audio: buffer,
-          mimetype: media.mimetype || "audio/mpeg"
+          mimetype: message.audioMessage.mimetype || "audio/mpeg"
         });
-      } else if (type === "documentMessage") {
+      } else if (message.documentMessage) {
         await sock.sendMessage(from, {
           document: buffer,
-          fileName: media.fileName || "file.bin",
-          mimetype: media.mimetype || "application/octet-stream",
-          caption
+          fileName: message.documentMessage.fileName || "file",
+          mimetype:
+            message.documentMessage.mimetype ||
+            "application/octet-stream"
         });
-      } else if (type === "stickerMessage") {
+      } else if (message.stickerMessage) {
         await sock.sendMessage(from, {
           sticker: buffer
         });
