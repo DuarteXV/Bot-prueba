@@ -24,6 +24,30 @@ const fetchInstagram = (url) =>
     return data;
   });
 
+// El campo "type" de la API no siempre es confiable (a veces dice
+// "image" para un archivo que en realidad es video). El link de
+// descarga trae un token JWT con el nombre real del archivo adentro
+// — lo decodificamos para saber la extensión de verdad.
+function inferirTipoReal(dlUrl) {
+  try {
+    const u = new URL(dlUrl);
+    const token = u.searchParams.get("token");
+    if (!token) return null;
+
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+
+    const json = JSON.parse(Buffer.from(payload, "base64").toString("utf-8"));
+    const filename = json.filename || "";
+
+    if (/\.(mp4|mov|webm|mkv)$/i.test(filename)) return "video";
+    if (/\.(jpe?g|png|webp)$/i.test(filename)) return "image";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default {
   name: ["instagram", "ig", "igdl"],
   description: "Descarga videos/fotos de Instagram (reels, posts)",
@@ -54,7 +78,10 @@ export default {
       const { data } = result;
       const caption = data.title ? `📥 *Instagram*\n\n${data.title}` : "📥 *Instagram*";
 
-      if (data.type === "video") {
+      // Prioridad: el tipo real detectado del archivo > lo que reporte la API
+      const tipoReal = inferirTipoReal(data.dl) || data.type;
+
+      if (tipoReal === "video") {
         await sock.sendMessage(
           from,
           { video: { url: data.dl }, caption, mimetype: "video/mp4" },
