@@ -3,7 +3,7 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 export default {
   name: ["readviewonce", "read", "readvo", "ver"],
   description: "Descarga y muestra el contenido de un mensaje ViewOnce",
-  category: "tools",
+  category: "utilidades",
   ownerOnly: false,
 
   async run({ sock, from, msg, reply }) {
