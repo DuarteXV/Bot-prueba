@@ -24,10 +24,6 @@ const fetchInstagram = (url) =>
     return data;
   });
 
-// El campo "type" de la API no siempre es confiable (a veces dice
-// "image" para un archivo que en realidad es video). El link de
-// descarga trae un token JWT con el nombre real del archivo adentro
-// — lo decodificamos para saber la extensión de verdad.
 function inferirTipoReal(dlUrl) {
   try {
     const u = new URL(dlUrl);
@@ -76,9 +72,8 @@ export default {
       }
 
       const { data } = result;
-      const caption = data.title ? `📥 *Instagram*\n\n${data.title}` : "📥 *Instagram*";
+      const caption = data.title ? `Aquí tienes :D\n\n${data.title}` : "Aquí tienes :D";
 
-      // Prioridad: el tipo real detectado del archivo > lo que reporte la API
       const tipoReal = inferirTipoReal(data.dl) || data.type;
 
       if (tipoReal === "video") {
