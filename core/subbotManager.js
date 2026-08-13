@@ -1,6 +1,7 @@
 import { Worker } from "worker_threads";
 import fs from "fs";
 import path from "path";
+import Database from "better-sqlite3";
 import { log } from "./logger.js";
 import { db } from "../database/db.js";
 
@@ -11,56 +12,21 @@ export const activeBots = new Map();
 const workers = new Map();
 let mainSock = null;
 
-function limpiarMainAnterior(jidNuevoMain) {
-  const todos = db.getAllBots ? db.getAllBots() : [];
-  for (const bot of todos) {
-    if (bot.isMain === true && bot.jid !== jidNuevoMain) {
-      db.setBot(bot.jid, { ...bot, isMain: false }, true);
-      log.info(`[MANAGER] Main anterior (${bot.jid}) desmarcado. Nuevo main: ${jidNuevoMain}`);
-    }
+// Comprueba si la sesión realmente terminó de vincularse (creds.registered)
+// en vez de solo mirar si el archivo auth.db existe.
+function isSessionRegistered(sessionDir) {
+  const dbPath = path.join(sessionDir, "auth.db");
+  if (!fs.existsSync(dbPath)) return false;
+  try {
+    const authDb = new Database(dbPath, { readonly: true, fileMustExist: true });
+    const row = authDb.prepare("SELECT data FROM auth WHERE id = ?").get("creds");
+    authDb.close();
+    if (!row) return false;
+    const creds = JSON.parse(row.data);
+    return !!creds.registered;
+  } catch {
+    return false;
   }
-}
-
-function tieneNombrePropio(datos) {
-  return !!(datos?.label && !datos.label.startsWith('SUB_') && datos.label !== 'Subbot' && datos.label !== 'MAIN');
-}
-
-export function getActiveBotsSnapshot() {
-  const snapshot = [];
-  for (const [key, value] of activeBots.entries()) {
-    snapshot.push({ id: key, ...value });
-  }
-  return snapshot;
-}
-
-function broadcastBotsList() {
-  const snapshot = getActiveBotsSnapshot();
-  for (const worker of workers.values()) {
-    worker.postMessage({ type: "bots_list", data: snapshot });
-  }
-}
-
-// 📡 Le pide a TODOS los subbots que reaccionen a un mensaje de canal.
-// El Main hace lo suyo aparte (en connection.js), porque corre en este
-// mismo proceso y no necesita pasar por un worker.
-export function broadcastReaccionCanal({ invite, serverId, emoji }) {
-  for (const worker of workers.values()) {
-    worker.postMessage({ type: "react_canal", invite, serverId, emoji });
-  }
-}
-
-function construirDatosMain(jid, labelDefault, status) {
-  const existentes = db.getBot(jid);
-
-  const labelFinal = tieneNombrePropio(existentes) ? existentes.label : labelDefault;
-
-  return {
-    ...existentes,
-    label: labelFinal,
-    jid,
-    status,
-    isMain: true
-  };
 }
 
 export function registerMainBot(sock, label = "MAIN") {
@@ -70,12 +36,9 @@ export function registerMainBot(sock, label = "MAIN") {
   const status = jid ? "online" : "connecting";
 
   activeBots.set("main", { label, jid, status, isMain: true });
-  broadcastBotsList();
 
   if (jid) {
-    limpiarMainAnterior(jid);
-    const datosFinales = construirDatosMain(jid, label, status);
-    db.setBot(jid, datosFinales, true);
+    db.setBot(jid, { label, jid, status, isMain: true });
     global.mainBotNum = jid.split("@")[0];
   }
 
@@ -87,43 +50,17 @@ export function registerMainBot(sock, label = "MAIN") {
         const currentJid = currentRawJid ? currentRawJid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : "";
         if (currentJid) {
           activeBots.set("main", { label, jid: currentJid, status: "online", isMain: true });
-          broadcastBotsList();
-          limpiarMainAnterior(currentJid);
-          const datosFinales = construirDatosMain(currentJid, label, "online");
-          db.setBot(currentJid, datosFinales, true);
+          db.setBot(currentJid, { label, jid: currentJid, status: "online", isMain: true });
           global.mainBotNum = currentJid.split("@")[0];
         }
       }
     });
   }
-
-  sock.ev.on("connection.update", ({ connection }) => {
-    if (connection === "open") {
-      const current = activeBots.get("main") || {};
-      activeBots.set("main", { ...current, status: "online" });
-      broadcastBotsList();
-    }
-    if (connection === "close") {
-      const current = activeBots.get("main") || {};
-      activeBots.set("main", { ...current, status: "offline" });
-      broadcastBotsList();
-    }
-  });
 }
 
 export function updateBotStatus(id, data) {
-  if (id !== "main" && data.jid && global.mainBotNum) {
-    const dataNum = data.jid.split("@")[0];
-    if (dataNum === global.mainBotNum) {
-      log.warn(`[MANAGER] Subbot ${id} intentó reportar el JID del main (${dataNum}) — ignorado`);
-      return;
-    }
-  }
-
   const current = activeBots.get(id) || {};
   activeBots.set(id, { ...current, ...data });
-  broadcastBotsList();
-
   if (data.jid) {
     db.setBot(data.jid, data);
   } else {
@@ -137,21 +74,40 @@ export function removeSubbot(id) {
     worker.terminate();
     workers.delete(id);
   }
-
   const botData = activeBots.get(id);
   activeBots.delete(id);
-  broadcastBotsList();
-
   if (botData && botData.jid) {
     db.setBot(botData.jid, { status: "offline" });
   } else {
     db.setBot(id, { status: "offline" });
   }
-
   const sessionDir = `${SUBBOTS_DIR}/${id}`;
   if (fs.existsSync(sessionDir)) {
     fs.rmSync(sessionDir, { recursive: true, force: true });
     log.warn(`[MANAGER] Sesión de ${id} eliminada por completo`);
+  }
+}
+
+// Lógica común de reconexión/limpieza para ambos flujos de lanzamiento
+function handleWorkerExit(id) {
+  workers.delete(id);
+  const sessionDir2 = `${SUBBOTS_DIR}/${id}`;
+
+  if (isSessionRegistered(sessionDir2)) {
+    log.info(`[MANAGER] Reconectando subbot ${id} en unos segundos...`);
+    setTimeout(() => launchSubbot(id), 5000 + Math.random() * 1500);
+  } else {
+    log.warn(`[MANAGER] ${id} nunca completó la vinculación — descartando sesión`);
+    const botData = activeBots.get(id);
+    activeBots.delete(id);
+    if (botData && botData.jid) {
+      db.setBot(botData.jid, { status: "offline" });
+    } else {
+      db.setBot(id, { status: "offline" });
+    }
+    if (fs.existsSync(sessionDir2)) {
+      fs.rmSync(sessionDir2, { recursive: true, force: true });
+    }
   }
 }
 
@@ -164,53 +120,22 @@ export function launchSubbot(id) {
   log.info(`[MANAGER] Lanzando subbot: ${id}`);
 
   const worker = new Worker("./core/subbotWorker.js", {
-    workerData: { id, sessionDir, mainBotNum: global.mainBotNum },
+    workerData: { id, sessionDir },
   });
-
   workers.set(id, worker);
-
-  worker.postMessage({ type: "bots_list", data: getActiveBotsSnapshot() });
 
   worker.on("message", (msg) => {
     if (msg.type === "status") {
       const subJid = msg.jid ? msg.jid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
-
-      const datosExistentes = subJid ? db.getBot(subJid) : null;
-      const conservarNombre = tieneNombrePropio(datosExistentes);
-
-      updateBotStatus(id, {
-        jid: subJid,
-        status: msg.status,
-        ...(conservarNombre ? {} : { label: id.toUpperCase() }),
-        isMain: false
-      });
+      updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false });
     }
-
-    if (msg.type === "logged_out") {
+    if (msg.type === "logged_out" || msg.type === "bad_session") {
       log.warn(`[MANAGER] Subbot ${id} cerró sesión — eliminando...`);
       removeSubbot(id);
     }
   });
 
-  worker.on("exit", (code) => {
-    workers.delete(id);
-    log.warn(`[MANAGER] Worker ${id} salió (code: ${code})`);
-
-    const sessionDir2 = `${SUBBOTS_DIR}/${id}`;
-    if (fs.existsSync(path.join(sessionDir2, "auth.db"))) {
-      log.info(`[MANAGER] Reconectando subbot ${id} en 5s...`);
-      setTimeout(() => launchSubbot(id), 5000);
-    } else {
-      const botData = activeBots.get(id);
-      activeBots.delete(id);
-      broadcastBotsList();
-      if (botData && botData.jid) {
-        db.setBot(botData.jid, { status: "offline" });
-      } else {
-        db.setBot(id, { status: "offline" });
-      }
-    }
-  });
+  worker.on("exit", () => handleWorkerExit(id));
 
   worker.on("error", (err) => {
     log.error(`[MANAGER] Worker ${id} error: ${err.message}`);
@@ -228,23 +153,27 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
     }
 
     const worker = new Worker("./core/subbotWorker.js", {
-      workerData: { id, sessionDir, phoneNumber, mainBotNum: global.mainBotNum },
+      workerData: { id, sessionDir, phoneNumber },
     });
-
     workers.set(id, worker);
-    worker.postMessage({ type: "bots_list", data: getActiveBotsSnapshot() });
 
     const timeout = setTimeout(() => {
+      // Si tarda demasiado en generar el code, algo va mal con el socket:
+      // no dejamos el worker huérfano, lo terminamos.
+      worker.terminate();
+      workers.delete(id);
       reject(new Error("Timeout esperando código"));
     }, 15000);
 
+    // El pairing code de WhatsApp expira ~60s después de generado, así que
+    // 70s es tiempo de sobra para saber si el usuario lo usó o no.
     const cleanupTimeout = setTimeout(() => {
       const bot = db.getBot(id);
       if (!bot || bot.status !== "online") {
         log.warn(`[MANAGER] Subbot ${id} nunca se conectó — eliminado`);
         removeSubbot(id);
       }
-    }, 2 * 60 * 1000);
+    }, 70_000);
 
     worker.on("message", (msg) => {
       if (msg.type === "code") {
@@ -254,16 +183,7 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
 
       if (msg.type === "status") {
         const subJid = msg.jid ? msg.jid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
-
-        const datosExistentes = subJid ? db.getBot(subJid) : null;
-        const conservarNombre = tieneNombrePropio(datosExistentes);
-
-        updateBotStatus(id, {
-          jid: subJid,
-          status: msg.status,
-          ...(conservarNombre ? {} : { label: id.toUpperCase() }),
-          isMain: false
-        });
+        updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false });
 
         if (msg.status === "online") {
           clearTimeout(cleanupTimeout);
@@ -276,34 +196,29 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
         }
       }
 
-      if (msg.type === "logged_out") {
+      if (msg.type === "logged_out" || msg.type === "bad_session") {
         clearTimeout(cleanupTimeout);
+        removeSubbot(id);
+      }
+
+      if (msg.type === "pairing_timeout") {
+        clearTimeout(cleanupTimeout);
+        log.warn(`[MANAGER] Subbot ${id} no ingresó el código a tiempo`);
         removeSubbot(id);
       }
     });
 
-    worker.on("exit", (code) => {
-      workers.delete(id);
+    worker.on("exit", () => {
       clearTimeout(timeout);
-
-      const sessionDir2 = `${SUBBOTS_DIR}/${id}`;
-      if (fs.existsSync(path.join(sessionDir2, "auth.db"))) {
-        setTimeout(() => launchSubbot(id), 5000);
-      } else {
-        const botData = activeBots.get(id);
-        activeBots.delete(id);
-        broadcastBotsList();
-        if (botData && botData.jid) {
-          db.setBot(botData.jid, { status: "offline" });
-        } else {
-          db.setBot(id, { status: "offline" });
-        }
-      }
+      clearTimeout(cleanupTimeout);
+      handleWorkerExit(id);
     });
 
     worker.on("error", (err) => {
       clearTimeout(timeout);
       clearTimeout(cleanupTimeout);
+      worker.terminate();
+      workers.delete(id);
       reject(err);
     });
   });
@@ -311,7 +226,6 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
 
 export function launchAllSubbots() {
   if (!fs.existsSync(SUBBOTS_DIR)) return;
-
   const dirs = fs.readdirSync(SUBBOTS_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name);
@@ -319,5 +233,14 @@ export function launchAllSubbots() {
   if (dirs.length === 0) return;
 
   log.info(`[MANAGER] Relanzando ${dirs.length} subbot(s)...`);
-  for (const id of dirs) launchSubbot(id);
+  for (const id of dirs) {
+    const sessionDir = path.resolve(`${SUBBOTS_DIR}/${id}`);
+    if (isSessionRegistered(sessionDir)) {
+      launchSubbot(id);
+    } else {
+      // Sesión abandonada de una vinculación que nunca se completó
+      log.warn(`[MANAGER] ${id} nunca completó vinculación — eliminando sesión huérfana`);
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+    }
+  }
 }
