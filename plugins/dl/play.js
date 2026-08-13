@@ -1,7 +1,7 @@
 import axios from "axios";
 import yts from "yt-search";
 
-const API_KEY = "Duarte-1311";
+const API_KEY = process.env.LEMPI_API_KEY;
 
 export default {
   name: ["play", "yta", "ytmp3", "playaudio"],

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_KEY = "Duarte-zz12";
+const API_KEY = process.env.ALYA_API_KEY;
 const API_URL = "https://api.alyacore.xyz/ai/copilot";
 
 export default {
