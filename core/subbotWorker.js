@@ -2,6 +2,7 @@ import { workerData, parentPort } from "worker_threads";
 import makeWASocket, {
   DisconnectReason,
   makeCacheableSignalKeyStore,
+  fetchLatestBaileysVersion,
   initAuthCreds,
   BufferJSON,
   proto,
@@ -16,10 +17,18 @@ import { loadPlugins } from "./pluginLoader.js";
 
 const { id, sessionDir, phoneNumber } = workerData;
 const logger = pino({ level: "silent" });
+
 let pluginsLoaded = false;
 
-// 🔧 Misma versión fija que el bot principal, en vez de fetchLatestBaileysVersion().
-const FIXED_WA_VERSION = [2, 3000, 1035194821];
+// WhatsApp invalida el pairing code ~60s después de generado
+const PAIRING_TIMEOUT_MS = 60_000;
+
+// Backoff exponencial con techo + jitter, en vez de un fijo 5s
+function backoffDelay(attempt) {
+  const base = 5000;
+  const capped = Math.min(60_000, base * Math.pow(1.6, Math.min(attempt, 8)));
+  return capped + Math.random() * 1500;
+}
 
 async function useSQLiteAuthState(sessionDir) {
   if (!fs.existsSync(sessionDir)) {
@@ -88,24 +97,18 @@ async function startWorker(_attempt = 0) {
   }
 
   const { state, saveCreds, closeDb } = await useSQLiteAuthState(sessionDir);
-  const version = FIXED_WA_VERSION;
-
+  const { version } = await fetchLatestBaileysVersion();
   const useCode = !!phoneNumber && !state.creds.registered;
 
   let sock;
   let connected = false;
   let pendingMessages = [];
+  let pairingTimer = null;
 
-  const msgStore = new Map();
-  const MAX_STORE_SIZE = 500;
-
-  function cacheMessage(msg) {
-    if (!msg?.key?.id) return;
-    const cacheKey = `${msg.key.remoteJid}:${msg.key.id}`;
-    msgStore.set(cacheKey, msg);
-    if (msgStore.size > MAX_STORE_SIZE) {
-      const oldestKey = msgStore.keys().next().value;
-      msgStore.delete(oldestKey);
+  function clearPairingTimer() {
+    if (pairingTimer) {
+      clearTimeout(pairingTimer);
+      pairingTimer = null;
     }
   }
 
@@ -133,20 +136,13 @@ async function startWorker(_attempt = 0) {
       keepAliveIntervalMs: 25000,
       retryRequestDelayMs: 3000,
       defaultQueryTimeoutMs: 60000,
-      getMessage: async (key) => {
-        const cacheKey = `${key.remoteJid}:${key.id}`;
-        const cached = msgStore.get(cacheKey);
-        return cached?.message || undefined;
-      },
     });
   } catch (e) {
     try { closeDb(); } catch {}
     parentPort?.postMessage({ type: "error", message: e.message });
-    if (_attempt < 10) setTimeout(() => startWorker(_attempt + 1), 5000);
+    setTimeout(() => startWorker(_attempt + 1), backoffDelay(_attempt));
     return;
   }
-
-  sock.sessionDir = sessionDir;
 
   if (useCode) {
     await new Promise((r) => setTimeout(r, 3000));
@@ -154,26 +150,38 @@ async function startWorker(_attempt = 0) {
       let code = await sock.requestPairingCode(phoneNumber.replace(/\D/g, ""));
       code = code?.match(/.{1,4}/g)?.join("-") || code;
       parentPort.postMessage({ type: "code", code });
+
+      // Si no se ingresa el código en 60s, cerramos limpio (no queda colgado)
+      pairingTimer = setTimeout(() => {
+        if (!connected) {
+          parentPort.postMessage({ type: "pairing_timeout" });
+          try { sock.end(new Error("pairing_timeout")); } catch {}
+          try { closeDb(); } catch {}
+          process.exit(0);
+        }
+      }, PAIRING_TIMEOUT_MS);
     } catch (e) {
       parentPort.postMessage({ type: "error", message: e.message });
+      try { closeDb(); } catch {}
+      process.exit(1);
+      return;
     }
   }
 
   sock.ev.on("connection.update", async ({ connection, lastDisconnect }) => {
     if (connection === "open") {
       connected = true;
+      clearPairingTimer();
+
       const rawJid = sock.user?.id || "";
       const jidLimpio = rawJid ? rawJid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : "";
-      parentPort.postMessage({
-        type: "status",
-        status: "online",
-        jid: jidLimpio,
-      });
+      parentPort.postMessage({ type: "status", status: "online", jid: jidLimpio });
       await flushPending();
     }
 
     if (connection === "close") {
       connected = false;
+      clearPairingTimer();
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       parentPort.postMessage({ type: "status", status: "offline", jid: "" });
       try { closeDb(); } catch {}
@@ -189,7 +197,18 @@ async function startWorker(_attempt = 0) {
         return;
       }
 
-      setTimeout(() => startWorker(_attempt + 1), 5000);
+      if (statusCode === DisconnectReason.badSession || statusCode === 403) {
+        parentPort.postMessage({ type: "bad_session", message: "Sesión inválida o bloqueada por WhatsApp" });
+        process.exit(0);
+        return;
+      }
+
+      if (statusCode === DisconnectReason.restartRequired) {
+        startWorker(0);
+        return;
+      }
+
+      setTimeout(() => startWorker(_attempt + 1), backoffDelay(_attempt));
     }
   });
 
@@ -197,18 +216,13 @@ async function startWorker(_attempt = 0) {
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
-
     for (const msg of messages) {
       if (!msg.message) continue;
       if (msg.key?.remoteJid === "status@broadcast") continue;
-
-      cacheMessage(msg);
-
       if (!connected) {
         pendingMessages.push(msg);
         return;
       }
-
       handleMessage(sock, msg, id.toUpperCase()).catch(() => {});
     }
   });
