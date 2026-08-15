@@ -104,8 +104,9 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
 
     if (msg.key?.fromMe && !isCmd) return;
 
-    const cmdName = isCmd ? body.slice(usedPrefix.length).trim().split(/\s+/)[0].toLowerCase() : "";
-    const args = isCmd ? body.slice(usedPrefix.length + cmdName.length).trim().split(/\s+/) : [];
+    const afterPrefix = isCmd ? body.slice(usedPrefix.length).trimStart() : "";
+    const cmdName = isCmd ? afterPrefix.split(/\s+/)[0].toLowerCase() : "";
+    const args = isCmd ? afterPrefix.slice(cmdName.length).trim().split(/\s+/).filter(Boolean) : [];
     const text = args.join(" ");
 
     let groupName = "";
