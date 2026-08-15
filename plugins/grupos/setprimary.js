@@ -22,11 +22,12 @@ export default {
 
     const quoted = msg.message?.extendedTextMessage?.contextInfo || msg.message?.imageMessage?.contextInfo || msg.message?.videoMessage?.contextInfo
 
-    const quotedRaw = quoted?.participant ? cleanJid(quoted.participant) : null
+    const mentioned = quoted?.mentionedJid || []
+    const targetRaw = mentioned[0] ? cleanJid(mentioned[0]) : (quoted?.participant ? cleanJid(quoted.participant) : null)
 
     let quotedSender = null
-    if (quotedRaw) {
-      const resolved = await resolveLid(quotedRaw)
+    if (targetRaw) {
+      const resolved = await resolveLid(targetRaw)
       quotedSender = parseNum(cleanJid(resolved))
     }
 
