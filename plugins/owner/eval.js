@@ -1,4 +1,5 @@
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
+import { db } from "../../database/db.js";
 
 export default {
   name: ["eval", "exec", ">"],
