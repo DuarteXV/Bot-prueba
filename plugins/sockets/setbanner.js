@@ -15,6 +15,12 @@ function botMatchesJid(b, targetJid) {
   return false
 }
 
+function getContextInfo(rawMessage) {
+  if (!rawMessage) return undefined
+  const type = Object.keys(rawMessage)[0]
+  return rawMessage[type]?.contextInfo
+}
+
 async function subirDix(buffer, filename, mimetype) {
   const form = new FormData()
   const blob = new Blob([buffer], { type: mimetype })
@@ -51,7 +57,7 @@ export default {
       let rawMessage = msg.message
       if (rawMessage?.ephemeralMessage) rawMessage = rawMessage.ephemeralMessage.message
 
-      const quotedContext = rawMessage?.extendedTextMessage?.contextInfo
+      const quotedContext = getContextInfo(rawMessage)
       let quotedMessage = quotedContext?.quotedMessage
       if (quotedMessage?.ephemeralMessage) quotedMessage = quotedMessage.ephemeralMessage.message
 
