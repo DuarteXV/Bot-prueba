@@ -1,15 +1,14 @@
 import { db } from '../../database/db.js'
-
 export default {
   name: ['setname', 'cambiarnombre'],
   description: 'Cambia el nombre/label de un bot (principal o subbot)',
   category: 'owner',
   ownerOnly: false,
 
-  async run({ sock, from, msg, args, reply }) {
+  async run({ sock, from, msg, args, reply, sender, resolveLid }) {
     try {
       const cleanJid = (id) => id ? id.split('@')[0].split(':')[0] + '@s.whatsapp.net' : ''
-      const senderJid = cleanJid(msg.key.participant || msg.participant || from)
+      const senderJid = cleanJid(sender) // ya resuelto por el handler, no recalcular desde msg.key.participant
       const currentBotJid = cleanJid(sock.user?.id)
 
       const esOwnerGlobal = db.hasRole(senderJid, 'owner')
@@ -32,7 +31,9 @@ export default {
         const targetRaw = quotedContext?.participant || mentioned[0]
 
         if (targetRaw) {
-          targetBotJid = cleanJid(targetRaw)
+          // el JID citado también puede venir como @lid, hay que resolverlo
+          const resolved = await resolveLid(targetRaw)
+          targetBotJid = cleanJid(resolved)
         } else {
           targetBotJid = currentBotJid
         }
