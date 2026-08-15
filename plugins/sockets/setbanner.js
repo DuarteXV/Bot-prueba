@@ -27,11 +27,11 @@ export default {
   category: 'owner',
   ownerOnly: false,
 
-  async run({ sock, from, msg, reply }) {
+  async run({ sock, from, msg, reply, sender, resolveLid }) {
     try {
       const cleanJid = (id) => id ? id.split('@')[0].split(':')[0] + '@s.whatsapp.net' : ''
 
-      const senderJid = cleanJid(msg.key.participant || msg.participant || from)
+      const senderJid = cleanJid(sender) // ya resuelto por el handler, no recalcular desde msg.key.participant
       const currentBotJid = cleanJid(sock.user?.id)
 
       const esOwnerGlobal = db.hasRole(senderJid, 'owner')
@@ -55,7 +55,8 @@ export default {
         const targetRaw = quotedContext?.participant || mentioned[0]
 
         if (targetRaw) {
-          targetBotJid = cleanJid(targetRaw)
+          const resolved = await resolveLid(targetRaw)
+          targetBotJid = cleanJid(resolved)
         } else {
           targetBotJid = currentBotJid
         }
