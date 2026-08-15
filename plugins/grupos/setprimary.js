@@ -17,22 +17,17 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ from, msg, react, reply, groupMeta }) {
-    const parseJid = (jid) => jid ? jid.split(':')[0].split('@')[0] : null
+  async run({ from, msg, react, reply, resolveLid }) {
+    const parseNum = (jid) => jid ? jid.split('@')[0] : null
 
     const quoted = msg.message?.extendedTextMessage?.contextInfo || msg.message?.imageMessage?.contextInfo || msg.message?.videoMessage?.contextInfo
 
-    const quotedRaw = quoted?.participant || null
+    const quotedRaw = quoted?.participant ? cleanJid(quoted.participant) : null
 
     let quotedSender = null
     if (quotedRaw) {
-      const cleanRaw = quotedRaw.split(':')[0]
-      if (cleanRaw.endsWith('@lid') && groupMeta?.participants) {
-        const match = groupMeta.participants.find(p => p.lid === cleanRaw)
-        quotedSender = match ? parseJid(match.id) : parseJid(cleanRaw)
-      } else {
-        quotedSender = parseJid(cleanRaw)
-      }
+      const resolved = await resolveLid(quotedRaw)
+      quotedSender = parseNum(cleanJid(resolved))
     }
 
     if (!quotedSender) {
@@ -41,7 +36,7 @@ export default {
 
       let texto = `🤖 *¿A qué bot quieres como primario?*\n\n`
       for (const [, bot] of botsActivos) {
-        const num = parseJid(bot.jid) || 'N/A'
+        const num = parseNum(cleanJid(bot.jid)) || 'N/A'
         texto += `  ✦ *${bot.label || 'Sub-Bot'}* → @${num}\n`
       }
       texto += `\n💡 Responde a un mensaje de ese bot y ejecuta *.setprimary* de nuevo.\n\n`
