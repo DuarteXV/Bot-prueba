@@ -65,7 +65,7 @@ export default {
 
       if (esOwnerGlobal) {
         const mentioned = quotedContext?.mentionedJid || []
-        const targetRaw = quotedContext?.participant || mentioned[0]
+        const targetRaw = mentioned[0] || quotedContext?.participant
 
         if (targetRaw) {
           const resolved = await resolveLid(targetRaw)
