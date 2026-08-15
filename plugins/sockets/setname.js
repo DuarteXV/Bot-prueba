@@ -1,4 +1,15 @@
+import { jidNormalizedUser } from '@whiskeysockets/baileys'
 import { db } from '../../database/db.js'
+
+const norm = (j) => (j ? jidNormalizedUser(j) : '')
+
+function botMatchesJid(b, targetJid) {
+  const targetNum = targetJid.split('@')[0]
+  if (b.jid && norm(b.jid) === targetJid) return true
+  if (b.id?.startsWith('sub_') && b.id.slice(4) === targetNum) return true
+  return false
+}
+
 export default {
   name: ['setname', 'cambiarnombre'],
   description: 'Cambia el nombre/label de un bot (principal o subbot)',
@@ -7,9 +18,8 @@ export default {
 
   async run({ sock, from, msg, args, reply, sender, resolveLid }) {
     try {
-      const cleanJid = (id) => id ? id.split('@')[0].split(':')[0] + '@s.whatsapp.net' : ''
-      const senderJid = cleanJid(sender) // ya resuelto por el handler, no recalcular desde msg.key.participant
-      const currentBotJid = cleanJid(sock.user?.id)
+      const senderJid = norm(sender)
+      const currentBotJid = norm(sock.user?.id)
 
       const esOwnerGlobal = db.hasRole(senderJid, 'owner')
       const esMismoSubbot = senderJid === currentBotJid
@@ -31,9 +41,8 @@ export default {
         const targetRaw = quotedContext?.participant || mentioned[0]
 
         if (targetRaw) {
-          // el JID citado también puede venir como @lid, hay que resolverlo
           const resolved = await resolveLid(targetRaw)
-          targetBotJid = cleanJid(resolved)
+          targetBotJid = norm(resolved)
         } else {
           targetBotJid = currentBotJid
         }
@@ -47,7 +56,7 @@ export default {
         return await reply({ text: '⚠️ Especifica el nuevo nombre para el bot (solo texto limpio).' })
       }
 
-      const esBotRegistrado = db.getAllBots().some(b => cleanJid(b.jid) === targetBotJid)
+      const esBotRegistrado = db.getAllBots().some(b => botMatchesJid(b, targetBotJid))
 
       if (esOwnerGlobal && !esBotRegistrado && targetBotJid !== currentBotJid) {
         return await reply({ text: '❌ El usuario seleccionado no está registrado como un bot (principal o subbot) en la base de datos.' })
