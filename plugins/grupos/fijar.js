@@ -1,4 +1,4 @@
-import { jidNormalizedUser } from "@whiskeysockets/baileys";
+import { jidNormalizedUser, generateWAMessageFromContent, proto } from "@whiskeysockets/baileys";
 
 const DURATIONS = {
   "24h": 86400,
@@ -33,25 +33,28 @@ export default {
       fromMe: isFromMe
     };
 
-    await reply({
-      text: `🐛 *Debug pin:*\n\`\`\`${JSON.stringify({ pinKey, time }, null, 2)}\`\`\``
-    });
-
     try {
-      const result = await sock.sendMessage(from, {
-        pin: {
-          type: 1,
-          time,
-          key: pinKey
+      const content = {
+        messageContextInfo: {
+          messageSecret: crypto.getRandomValues(new Uint8Array(32)),
+          messageAddOnDurationInSecs: time
+        },
+        pinInChatMessage: {
+          key: pinKey,
+          type: proto.Message.PinInChatMessage.Type.PIN_FOR_ALL,
+          senderTimestampMs: Date.now()
         }
-      });
+      };
+
+      const m = generateWAMessageFromContent(from, content, { userJid: sock.user.id });
+      await sock.relayMessage(from, m.message, { messageId: m.key.id });
 
       await reply({
-        text: `『📌』Mensaje fijado por ${durArg && DURATIONS[durArg] ? durArg : "24h"}.\n\n🐛 *Resultado envío:*\n\`\`\`${JSON.stringify(result, null, 2)}\`\`\``
+        text: `『📌』Mensaje fijado por ${durArg && DURATIONS[durArg] ? durArg : "24h"}.`
       });
     } catch (e) {
       await reply({
-        text: `❌ No se pudo fijar:\n${e.message}\n\n🐛 *Stack:*\n\`\`\`${e.stack}\`\`\``
+        text: `❌ No se pudo fijar:\n${e.message}`
       });
     }
   }
