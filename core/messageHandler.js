@@ -2,6 +2,7 @@ import config from "../config.js";
 import { log } from "./logger.js";
 import { getPlugins } from "./pluginLoader.js";
 import { db } from "../database/db.js";
+import { checkAntilink } from "./antilink.js";
 
 const groupCache = new Map();
 const prefixes = Array.isArray(config.prefix) ? config.prefix : [config.prefix];
@@ -37,10 +38,6 @@ async function resolveLid(lidJid, groupMeta, sock) {
   return lidJid;
 }
 
-// 🔧 Chequeo robusto de owner/coowner: si el número real ya coincide,
-// listo. Si no (porque el sender llegó como LID sin resolver), intenta
-// al revés — resuelve el LID actual del owner/coowner conocido y lo
-// compara contra el LID crudo que llegó en el mensaje.
 async function matchesConfiguredNumber(numberList, senderNum, rawLid, sock) {
   if (numberList.includes(senderNum)) return true;
 
@@ -134,8 +131,6 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       }
     }
 
-    // Guardamos el LID crudo original (antes de resolver) para el
-    // chequeo de owner por si la resolución normal falla.
     const rawSenderLid = sender.endsWith("@lid") ? sender : (senderLid || "");
 
     if (sender.endsWith("@lid")) {
@@ -187,6 +182,11 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       const groupData = db.getGroup(from);
       if (groupData?.adminMode && !isAdmin && !isMod) {
         return;
+      }
+
+      if (groupData?.antilink && body && !isAdmin && !isMod && !isCmd) {
+        const handled = await checkAntilink({ sock, msg, from, sender, body, isBotAdmin, botLabel });
+        if (handled) return;
       }
     }
 
