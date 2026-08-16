@@ -30,13 +30,19 @@ export default {
       fromMe: isFromMe
     };
 
+    await reply({
+      text: `🐛 *pinKey desfijar:*\n\`\`\`${JSON.stringify(pinKey, null, 2)}\`\`\``
+    });
+
     try {
-      await sock.sendMessage(from, {
+      const result = await sock.sendMessage(from, {
         pin: pinKey,
         type: 0
       });
 
-      await reply({ text: "『📌』Mensaje desfijado." });
+      await reply({
+        text: `『📌』Mensaje desfijado.\n\n🐛 *result:*\n\`\`\`${JSON.stringify(result, null, 2)}\`\`\``
+      });
     } catch (e) {
       await reply({ text: `❌ No se pudo desfijar:\n${e.message}` });
     }
