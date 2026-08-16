@@ -1,6 +1,6 @@
 import { log } from "./logger.js";
 
-const linkRegex = /(chat\.whatsapp\.com\/[0-9A-Za-z]{20,24})|(whatsapp\.com\/channel\/[0-9A-Za-z]+)/i;
+const linkRegex = /(?:^|[\s/])(?:chat\.whatsapp\.com\/[0-9A-Za-z]{20,24}|(?:www\.|web\.)?whatsapp\.com\/channel\/[0-9A-Za-z]{10,30})(?:[\s?]|$)/i;
 
 export function hasWhatsappLink(text = "") {
   return linkRegex.test(text);
