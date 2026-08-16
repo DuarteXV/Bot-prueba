@@ -1,10 +1,4 @@
-import { generateWAMessageFromContent, proto } from "@whiskeysockets/baileys";
-
-const DURATIONS = {
-  "24h": 86400,
-  "7d": 604800,
-  "30d": 2592000
-};
+import { jidNormalizedUser } from "@whiskeysockets/baileys";
 
 export default {
   name: ["fijar"],
@@ -13,7 +7,7 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ sock, from, msg, args, reply, resolveLid }) {
+  async run({ sock, from, msg, reply, resolveLid }) {
     const quoted = msg.message?.extendedTextMessage?.contextInfo;
 
     if (!quoted?.stanzaId) {
@@ -21,9 +15,6 @@ export default {
         text: "『📌』Rᥱs⍴onძᧉ ⍺Ɩ ᴍᧉn𝗌⍺jᧉ qᥙᧉ qᥙіᧉꭇᧉ𝗌 fіj⍺ꭇ."
       });
     }
-
-    const durArg = args[0]?.toLowerCase();
-    const time = DURATIONS[durArg] || DURATIONS["24h"];
 
     const isFromMe = !quoted.participant || quoted.participant === sock.user?.id;
     let participant = quoted.participant;
@@ -40,27 +31,14 @@ export default {
     };
 
     try {
-      const content = {
-        pinInChatMessage: {
-          key: pinKey,
-          type: proto.Message.PinInChatMessage.Type.PIN_FOR_ALL,
-          senderTimestampMs: Date.now()
-        },
-        messageContextInfo: {
-          messageAddOnDurationInSecs: time
-        }
-      };
-
-      const m = generateWAMessageFromContent(from, content, { userJid: sock.user.id });
-      await sock.relayMessage(from, m.message, { messageId: m.key.id });
-
-      await reply({
-        text: `『📌』Mensaje fijado por ${durArg && DURATIONS[durArg] ? durArg : "24h"}.`
+      await sock.sendMessage(from, {
+        pin: pinKey,
+        type: 1
       });
+
+      await reply({ text: "『📌』Mensaje fijado." });
     } catch (e) {
-      await reply({
-        text: `❌ No se pudo fijar:\n${e.message}`
-      });
+      await reply({ text: `❌ No se pudo fijar:\n${e.message}` });
     }
   }
 };
