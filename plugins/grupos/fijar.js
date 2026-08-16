@@ -1,5 +1,4 @@
 import { generateWAMessageFromContent, proto } from "@whiskeysockets/baileys";
-import { randomBytes } from "crypto";
 
 const DURATIONS = {
   "24h": 86400,
@@ -42,20 +41,15 @@ export default {
 
     try {
       const content = {
-        messageContextInfo: {
-          messageSecret: randomBytes(32),
-          messageAddOnDurationInSecs: time
-        },
         pinInChatMessage: {
           key: pinKey,
           type: proto.Message.PinInChatMessage.Type.PIN_FOR_ALL,
           senderTimestampMs: Date.now()
+        },
+        messageContextInfo: {
+          messageAddOnDurationInSecs: time
         }
       };
-
-      await reply({
-        text: `🐛 *pinKey (participant resuelto):*\n\`\`\`${JSON.stringify(pinKey, null, 2)}\`\`\``
-      });
 
       const m = generateWAMessageFromContent(from, content, { userJid: sock.user.id });
       await sock.relayMessage(from, m.message, { messageId: m.key.id });
