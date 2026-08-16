@@ -7,8 +7,6 @@ export default {
   ownerOnly: true,
 
   async run({ sock, from, msg, reply }) {
-    await reply({ text: "🐛 1) Entró al comando" });
-
     try {
       const images = [
         "https://cdn.dix.lat/me/ncimkw-c91x-5odrqn-6842d5.jpg",
@@ -16,20 +14,12 @@ export default {
         "https://cdn.dix.lat/me/c4mk7m-c91x-vxxxsn-78b969.jpg"
       ];
 
-      await reply({ text: `🐛 2) sock.waUploadToServer existe: ${typeof sock.waUploadToServer}` });
-
       const cards = [];
       for (let i = 0; i < images.length; i++) {
-        await reply({ text: `🐛 3) Subiendo imagen ${i + 1}...` });
-
         const imageMessage = await prepareWAMessageMedia(
           { image: { url: images[i] } },
           { upload: sock.waUploadToServer }
         );
-
-        await reply({
-          text: `🐛 4) imageMessage ${i + 1}:\n\`\`\`${JSON.stringify(imageMessage, null, 2).slice(0, 1000)}\`\`\``
-        });
 
         cards.push({
           header: {
@@ -52,8 +42,6 @@ export default {
         });
       }
 
-      await reply({ text: "🐛 5) Cards armadas, generando mensaje..." });
-
       const content = {
         interactiveMessage: {
           body: { text: "Deslizá para ver más opciones 👉" },
@@ -66,13 +54,24 @@ export default {
 
       const m = generateWAMessageFromContent(from, content, { quoted: msg, userJid: sock.user.id });
 
-      await reply({ text: "🐛 6) Mensaje generado, mandando con relayMessage..." });
+      await sock.relayMessage(from, m.message, {
+        messageId: m.key.id,
+        additionalNodes: [
+          { tag: "biz", attrs: {} },
+          {
+            tag: "interactive",
+            attrs: { type: "native_flow", v: "1" },
+            content: [
+              { tag: "native_flow", attrs: { name: "carousel", v: "1" } }
+            ]
+          }
+        ]
+      });
 
-      await sock.relayMessage(from, m.message, { messageId: m.key.id });
-
-      await reply({ text: "🐛 7) relayMessage terminó sin error" });
+      await reply({ text: "🐛 Enviado con additionalNodes" });
     } catch (e) {
-      await reply({ text: `❌ Error en paso intermedio:\n${e.message}\n\n\`\`\`${e.stack?.slice(0, 800)}\`\`\`` });
+      console.error(e);
+      await reply({ text: `❌ Error:\n${e.message}\n\n\`\`\`${e.stack?.slice(0, 800)}\`\`\`` });
     }
   }
 };
