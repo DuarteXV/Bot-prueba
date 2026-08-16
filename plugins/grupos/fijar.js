@@ -1,4 +1,5 @@
 import { jidNormalizedUser, generateWAMessageFromContent, proto } from "@whiskeysockets/baileys";
+import { randomBytes } from "crypto";
 
 const DURATIONS = {
   "24h": 86400,
@@ -36,7 +37,7 @@ export default {
     try {
       const content = {
         messageContextInfo: {
-          messageSecret: crypto.getRandomValues(new Uint8Array(32)),
+          messageSecret: randomBytes(32),
           messageAddOnDurationInSecs: time
         },
         pinInChatMessage: {
@@ -46,7 +47,16 @@ export default {
         }
       };
 
+      await reply({
+        text: `🐛 *content antes de generar:*\n\`\`\`${JSON.stringify(content, null, 2)}\`\`\``
+      });
+
       const m = generateWAMessageFromContent(from, content, { userJid: sock.user.id });
+
+      await reply({
+        text: `🐛 *m.message después de generar:*\n\`\`\`${JSON.stringify(m.message, null, 2)}\`\`\``
+      });
+
       await sock.relayMessage(from, m.message, { messageId: m.key.id });
 
       await reply({
@@ -54,7 +64,7 @@ export default {
       });
     } catch (e) {
       await reply({
-        text: `❌ No se pudo fijar:\n${e.message}`
+        text: `❌ No se pudo fijar:\n${e.message}\n\n🐛 *Stack:*\n\`\`\`${e.stack}\`\`\``
       });
     }
   }
