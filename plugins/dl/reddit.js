@@ -1,126 +1,170 @@
-import { createWriteStream } from "node:fs";
-import { mkdir, unlink } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
-import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { gotScraping } from 'got-scraping'
+import { CookieJar } from 'tough-cookie'
+import { Buffer } from 'node:buffer'
 
-const HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
-};
+const BASE = 'https://redvid.io'
+const REDDIT_REGEX = /reddit\.com\/|redd\.it\//i
+const DOWNLOAD_MAX_RETRIES = 8
+const RETRY_DELAY = 2000
 
-async function getPostData(redditUrl) {
-  const jsonUrl = `${redditUrl.split("?")[0].replace(/\/$/, "")}.json`;
-  const res = await fetch(jsonUrl, { headers: HEADERS });
-  if (!res.ok) throw new Error(`Reddit devolvió HTTP ${res.status}`);
-  const data = await res.json();
-  return data[0].data.children[0].data;
-}
+const cookieJar = new CookieJar()
 
-function getVideoUrl(post) {
-  const media = post.secure_media || post.media;
-  if (!media?.reddit_video) {
-    throw new Error("ese post no tiene un video de reddit (v.redd.it)");
+const http = gotScraping.extend({
+  cookieJar,
+  timeout: { request: 30000 },
+  retry: { limit: 1 },
+  throwHttpErrors: false,
+  headerGeneratorOptions: {
+    browsers: [{ name: 'chrome', minVersion: 120 }],
+    devices: ['desktop'],
+    operatingSystems: ['windows'],
+    locales: ['es-419', 'es', 'en-US']
   }
-  return media.reddit_video.fallback_url.split("?")[0];
-}
-
-function guessAudioUrl(videoUrl) {
-  // el audio vive aparte (formato DASH); si algún día falla, hay que
-  // revisar <base>/DASHPlaylist.mpd para sacar el nombre real
-  const base = videoUrl.slice(0, videoUrl.lastIndexOf("/"));
-  return `${base}/DASH_audio.mp4`;
-}
-
-async function urlExists(url) {
-  const res = await fetch(url, { method: "HEAD", headers: HEADERS });
-  return res.ok;
-}
-
-async function downloadToFile(url, filePath) {
-  const res = await fetch(url, { headers: HEADERS });
-  if (!res.ok) throw new Error(`HTTP ${res.status} al descargar ${url}`);
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(filePath));
-}
-
-function mergeAudioVideo(videoPath, audioPath, outputPath) {
-  return new Promise((resolve, reject) => {
-    const ff = spawn("ffmpeg", ["-y", "-i", videoPath, "-i", audioPath, "-c", "copy", outputPath]);
-    ff.on("error", reject);
-    ff.on("close", (code) =>
-      code === 0 ? resolve() : reject(new Error(`ffmpeg salió con código ${code}`))
-    );
-  });
-}
+})
 
 export default {
-  name: ["reddit", "rdl", "redditdl", "rvid"],
-  description: "Descarga videos de Reddit con audio",
-  category: "dl",
+  name: ['reddit', 'redditdl', 'rddl'],
+  description: 'Descarga videos, audio o imágenes desde un enlace de Reddit usando RedVid',
+  category: 'download',
   ownerOnly: false,
-  async run({ sock, from, msg, text, reply, react }) {
-    const tmpDir = path.join(tmpdir(), "reddit-dl");
-    const id = randomUUID();
-    const videoPath = path.join(tmpDir, `${id}_video.mp4`);
-    const audioPath = path.join(tmpDir, `${id}_audio.mp4`);
-    const outputPath = path.join(tmpDir, `${id}_final.mp4`);
 
+  async run({ sock, from, msg, args, react, reply }) {
     try {
-      if (!text?.trim()) {
+      const url = args.find((a) => REDDIT_REGEX.test(a))
+      const wantAudio = args.some((a) => {
+        const low = a.toLowerCase()
+        return low === 'mp3' || low === 'audio'
+      })
+
+      if (!url) {
         return reply({
-          text: "⛧ pasame el link de un post de reddit con video",
-        });
-      }
-      if (!/reddit\.com|redd\.it/.test(text)) {
-        return reply({
-          text: "⛧ eso no parece un link de reddit",
-        });
+          text: '❌ Debes darme un enlace de Reddit válido.\n\n*Ejemplos:*\n`.reddit https://www.reddit.com/r/...` (video)\n`.reddit https://www.reddit.com/r/... mp3` (solo audio)'
+        })
       }
 
-      await react("🎬");
-      await mkdir(tmpDir, { recursive: true });
+      await react('🕒')
 
-      const post = await getPostData(text.trim());
-      const videoUrl = getVideoUrl(post);
-      const audioUrl = guessAudioUrl(videoUrl);
+      const info = await fetchMedia(url)
+      console.log('[reddit]', info.mediaType, '| video:', !!info.videoToken, '| audio:', !!info.audioToken, '| pidió audio:', wantAudio)
 
-      await downloadToFile(videoUrl, videoPath);
-
-      let finalPath = videoPath;
-      if (await urlExists(audioUrl)) {
-        await downloadToFile(audioUrl, audioPath);
-        await mergeAudioVideo(videoPath, audioPath, outputPath);
-        finalPath = outputPath;
+      if (info.mediaType === 'image' && info.images.length) {
+        for (const img of info.images.slice(0, 10)) {
+          await sock.sendMessage(from, { image: { url: img } }, { quoted: msg })
+        }
+        await react('✔️')
+        return
       }
 
-      const title = post.title || "Video de Reddit";
-      const subreddit = post.subreddit_name_prefixed || "";
-      const author = post.author ? `u/${post.author}` : "";
-      const permalink = `https://reddit.com${post.permalink}`;
+      // si pidió mp3 y hay audio disponible, mandar solo el audio
+      if (wantAudio && info.audioToken) {
+        const buffer = await downloadWithRetry(info.audioToken)
+        await sock.sendMessage(from, {
+          audio: buffer,
+          fileName: `${info.filename || 'reddit'}.mp3`,
+          mimetype: 'audio/mpeg'
+        }, { quoted: msg })
+        await react('✔️')
+        return
+      }
 
-      await sock.sendMessage(
-        from,
-        {
-          video: { url: finalPath },
-          caption:
-            `⛧ ${title}\n\n` +
-            (subreddit ? `⛧ subreddit › ${subreddit}\n` : "") +
-            (author ? `⛧ autor › ${author}\n` : "") +
-            `⛧ link › ${permalink}`,
-        },
-        { quoted: msg }
-      );
+      if (info.videoToken) {
+        const buffer = await downloadWithRetry(info.videoToken)
+        await sock.sendMessage(from, {
+          video: buffer,
+          fileName: `${info.filename || 'reddit'}.mp4`,
+          mimetype: 'video/mp4',
+          caption: info.title ? `*${info.title}*` : undefined
+        }, { quoted: msg })
+        await react('✔️')
+        return
+      }
 
-      await react("✅");
+      if (info.audioToken) {
+        const buffer = await downloadWithRetry(info.audioToken)
+        await sock.sendMessage(from, {
+          audio: buffer,
+          fileName: `${info.filename || 'reddit'}.mp3`,
+          mimetype: 'audio/mpeg'
+        }, { quoted: msg })
+        await react('✔️')
+        return
+      }
+
+      throw new Error('No se encontró contenido descargable')
     } catch (e) {
-      console.error(e);
-      await react("❌");
-      await reply({ text: `⛧ ${e.message}` });
-    } finally {
-      await Promise.allSettled([unlink(videoPath), unlink(audioPath), unlink(outputPath)]);
+      console.error('[reddit]', e?.message || e)
+      await react('❌')
+      await reply({ text: `❌ *Error:* ${e?.message || 'falló la descarga'}` })
     }
-  },
-};
+  }
+}
+
+async function fetchMedia(url) {
+  const res = await http.post(`${BASE}/fetch`, {
+    headers: {
+      accept: '*/*',
+      'content-type': 'application/json',
+      origin: BASE,
+      referer: `${BASE}/`
+    },
+    body: JSON.stringify({ url, lang: 'en' })
+  })
+
+  if (res.statusCode !== 200) throw new Error(`no se pudo procesar el enlace (HTTP ${res.statusCode})`)
+
+  let data = null
+  try { data = JSON.parse(String(res.body)) } catch {}
+  if (!data?.success) throw new Error(data?.message || 'el enlace no es válido')
+
+  const view = data.view || ''
+
+  const tokens = [...view.matchAll(/href="https:\/\/redvid\.io\/download\?token=([^"]+)"/g)]
+    .map(mm => decodeURIComponent(mm[1] || ''))
+
+  const images = [...view.matchAll(/<img[^>]+src="([^"]+)"/g)]
+    .map(mm => mm[1] || '')
+    .filter(src => src.startsWith('http') && !src.includes('icon') && !src.includes('logo'))
+
+  const titleMatch = view.match(/<h[12][^>]*>([^<]+)<\/h[12]>/)
+  const title = titleMatch ? (titleMatch[1] || '').trim() : ''
+
+  return {
+    mediaType: data.media_type || 'video',
+    videoToken: tokens[0] || '',
+    audioToken: tokens[1] || '',
+    images,
+    title,
+    filename: sanitize(title) || 'reddit'
+  }
+}
+
+async function downloadWithRetry(token) {
+  for (let i = 0; i < DOWNLOAD_MAX_RETRIES; i++) {
+    const res = await http.get(`${BASE}/download?token=${encodeURIComponent(token)}`, {
+      headers: { referer: `${BASE}/` },
+      responseType: 'buffer'
+    })
+
+    if (res.statusCode === 200) {
+      const buffer = Buffer.from(res.rawBody)
+      if (buffer.length > 1024) return buffer
+    }
+
+    if (res.statusCode === 503 || res.statusCode === 202) {
+      await sleep(RETRY_DELAY)
+      continue
+    }
+
+    if (res.statusCode >= 400) throw new Error(`descarga falló (HTTP ${res.statusCode})`)
+  }
+
+  throw new Error('la descarga no estuvo lista a tiempo')
+}
+
+function sanitize(s) {
+  return (s || '').replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_').slice(0, 80).toLowerCase()
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms))
+}
