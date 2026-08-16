@@ -1,4 +1,4 @@
-import { jidNormalizedUser, generateWAMessageFromContent, proto } from "@whiskeysockets/baileys";
+import { generateWAMessageFromContent, proto } from "@whiskeysockets/baileys";
 import { randomBytes } from "crypto";
 
 const DURATIONS = {
@@ -14,7 +14,7 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ sock, from, msg, args, reply }) {
+  async run({ sock, from, msg, args, reply, resolveLid }) {
     const quoted = msg.message?.extendedTextMessage?.contextInfo;
 
     if (!quoted?.stanzaId) {
@@ -27,10 +27,16 @@ export default {
     const time = DURATIONS[durArg] || DURATIONS["24h"];
 
     const isFromMe = !quoted.participant || quoted.participant === sock.user?.id;
+    let participant = quoted.participant;
+
+    if (!isFromMe && participant) {
+      participant = await resolveLid(participant);
+    }
+
     const pinKey = {
       remoteJid: from,
       id: quoted.stanzaId,
-      participant: isFromMe ? undefined : jidNormalizedUser(quoted.participant),
+      participant: isFromMe ? undefined : participant,
       fromMe: isFromMe
     };
 
@@ -48,15 +54,10 @@ export default {
       };
 
       await reply({
-        text: `🐛 *content antes de generar:*\n\`\`\`${JSON.stringify(content, null, 2)}\`\`\``
+        text: `🐛 *pinKey (participant resuelto):*\n\`\`\`${JSON.stringify(pinKey, null, 2)}\`\`\``
       });
 
       const m = generateWAMessageFromContent(from, content, { userJid: sock.user.id });
-
-      await reply({
-        text: `🐛 *m.message después de generar:*\n\`\`\`${JSON.stringify(m.message, null, 2)}\`\`\``
-      });
-
       await sock.relayMessage(from, m.message, { messageId: m.key.id });
 
       await reply({
@@ -64,7 +65,7 @@ export default {
       });
     } catch (e) {
       await reply({
-        text: `❌ No se pudo fijar:\n${e.message}\n\n🐛 *Stack:*\n\`\`\`${e.stack}\`\`\``
+        text: `❌ No se pudo fijar:\n${e.message}`
       });
     }
   }
