@@ -25,26 +25,33 @@ export default {
     const durArg = args[0]?.toLowerCase();
     const time = DURATIONS[durArg] || DURATIONS["24h"];
 
+    const isFromMe = !quoted.participant || quoted.participant === sock.user?.id;
+    const pinKey = {
+      remoteJid: from,
+      id: quoted.stanzaId,
+      participant: isFromMe ? undefined : jidNormalizedUser(quoted.participant),
+      fromMe: isFromMe
+    };
+
+    await reply({
+      text: `🐛 *Debug pin:*\n\`\`\`${JSON.stringify({ pinKey, time }, null, 2)}\`\`\``
+    });
+
     try {
-      await sock.sendMessage(from, {
+      const result = await sock.sendMessage(from, {
         pin: {
           type: 1,
           time,
-          key: {
-            remoteJid: from,
-            id: quoted.stanzaId,
-            participant: jidNormalizedUser(quoted.participant),
-            fromMe: false
-          }
+          key: pinKey
         }
       });
 
       await reply({
-        text: `『📌』Mensaje fijado por ${durArg && DURATIONS[durArg] ? durArg : "24h"}.`
+        text: `『📌』Mensaje fijado por ${durArg && DURATIONS[durArg] ? durArg : "24h"}.\n\n🐛 *Resultado envío:*\n\`\`\`${JSON.stringify(result, null, 2)}\`\`\``
       });
     } catch (e) {
       await reply({
-        text: `❌ No se pudo fijar:\n${e.message}`
+        text: `❌ No se pudo fijar:\n${e.message}\n\n🐛 *Stack:*\n\`\`\`${e.stack}\`\`\``
       });
     }
   }
