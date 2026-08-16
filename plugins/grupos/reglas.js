@@ -19,34 +19,41 @@ export default {
       return await reply({ text: REGLAS[categoria] });
     }
 
-    const content = {
-      interactiveMessage: {
-        body: { text: "📋 Elegí una categoría de reglas para ver el detalle:" },
-        footer: { text: "Yuta Bot" },
-        nativeFlowMessage: {
-          buttons: [
-            {
-              name: "single_select",
-              buttonParamsJson: JSON.stringify({
-                title: "Ver categorías",
-                sections: [
-                  {
-                    title: "Categorías de reglas",
-                    rows: [
-                      { title: "Spam", description: "Reglas sobre links y flood", id: `${usedPrefix}reglas spam` },
-                      { title: "Respeto", description: "Convivencia en el grupo", id: `${usedPrefix}reglas respeto` },
-                      { title: "Venta", description: "Publicidad y promociones", id: `${usedPrefix}reglas venta` }
-                    ]
-                  }
-                ]
-              })
-            }
-          ]
+    try {
+      const content = {
+        interactiveMessage: {
+          body: { text: "📋 Elegí una categoría de reglas para ver el detalle:" },
+          footer: { text: "Yuta Bot" },
+          nativeFlowMessage: {
+            buttons: [
+              {
+                name: "single_select",
+                buttonParamsJson: JSON.stringify({
+                  title: "Ver categorías",
+                  sections: [
+                    {
+                      title: "Categorías de reglas",
+                      rows: [
+                        { title: "Spam", description: "Reglas sobre links y flood", id: `${usedPrefix}reglas spam` },
+                        { title: "Respeto", description: "Convivencia en el grupo", id: `${usedPrefix}reglas respeto` },
+                        { title: "Venta", description: "Publicidad y promociones", id: `${usedPrefix}reglas venta` }
+                      ]
+                    }
+                  ]
+                })
+              }
+            ]
+          }
         }
-      }
-    };
+      };
 
-    const m = generateWAMessageFromContent(from, content, { quoted: msg, userJid: sock.user.id });
-    await sock.relayMessage(from, m.message, { messageId: m.key.id });
+      const m = generateWAMessageFromContent(from, content, { quoted: msg, userJid: sock.user.id });
+      await reply({ text: "🐛 Mensaje generado, enviando..." });
+
+      await sock.relayMessage(from, m.message, { messageId: m.key.id });
+      await reply({ text: "🐛 relayMessage terminó sin error" });
+    } catch (e) {
+      await reply({ text: `❌ Error:\n${e.message}\n\n\`\`\`${e.stack?.slice(0, 800)}\`\`\`` });
+    }
   }
 };
