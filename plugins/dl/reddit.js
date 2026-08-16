@@ -25,7 +25,7 @@ const http = gotScraping.extend({
 export default {
   name: ['reddit', 'redditdl', 'rddl'],
   description: 'Descarga videos, audio o imágenes desde un enlace de Reddit usando RedVid',
-  category: 'download',
+  category: 'dl',
   ownerOnly: false,
 
   async run({ sock, from, msg, args, react, reply }) {
