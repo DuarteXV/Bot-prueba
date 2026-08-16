@@ -7,7 +7,7 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ sock, from, msg, reply }) {
+  async run({ sock, from, msg, reply, resolveLid }) {
     const quoted = msg.message?.extendedTextMessage?.contextInfo;
 
     if (!quoted?.stanzaId) {
@@ -16,17 +16,24 @@ export default {
       });
     }
 
+    const isFromMe = !quoted.participant || quoted.participant === sock.user?.id;
+    let participant = quoted.participant;
+
+    if (!isFromMe && participant) {
+      participant = await resolveLid(participant);
+    }
+
+    const pinKey = {
+      remoteJid: from,
+      id: quoted.stanzaId,
+      participant: isFromMe ? undefined : participant,
+      fromMe: isFromMe
+    };
+
     try {
       await sock.sendMessage(from, {
-        pin: {
-          type: 2,
-          key: {
-            remoteJid: from,
-            id: quoted.stanzaId,
-            participant: jidNormalizedUser(quoted.participant),
-            fromMe: false
-          }
-        }
+        pin: pinKey,
+        type: 0
       });
 
       await reply({ text: "『📌』Mensaje desfijado." });
