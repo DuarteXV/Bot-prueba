@@ -1,24 +1,55 @@
 export default {
-  name: ["estadogrupo", "gstatus"],
-  description: "Sube un estado dentro del grupo",
+  name: ["estadogrupal"],
+  description: "Sube un estado visible solo para los miembros del grupo (morado)",
   category: "grupos",
   groupOnly: true,
   adminOnly: true,
 
-  async run({ sock, from, text, reply }) {
+  async run({ sock, from, groupMeta, text, reply, resolveLid }) {
     if (!text) {
-      return await reply({ text: "❀ Escribe un texto para el estado del grupo." });
+      return await reply({ text: "❀ Escribe un texto para el estado." });
     }
 
     try {
-      await sock.sendMessage(from, {
-        text,
-        backgroundColor: "#7C3AED",
-        font: 5,
-        groupStatus: true
-      });
+      const participants = groupMeta?.participants || (await sock.groupMetadata(from)).participants;
+
+      const resolved = await Promise.all(
+        participants.map(async (p) => {
+          if (p.id.endsWith("@lid")) {
+            return await resolveLid(p.id);
+          }
+          return p.id;
+        })
+      );
+
+      const statusJidList = [...new Set(resolved)]
+        .filter((jid) => jid && jid !== sock.user?.id && !jid.endsWith("@lid"));
+
+      if (!statusJidList.length) {
+        return await reply({ text: "❌ No se pudo resolver el número real de ningún miembro." });
+      }
+
+      await sock.sendMessage(
+        "status@broadcast",
+        {
+          text,
+          contextInfo: {
+            statusAudienceMetadata: {
+              audienceType: 1 // CLOSE_FRIENDS
+            }
+          }
+        },
+        {
+          backgroundColor: "#7C3AED",
+          font: 2,
+          statusJidList,
+          broadcast: true
+        }
+      );
+
+      await reply({ text: `『⭐』Estado enviado a ${statusJidList.length} miembros del grupo.` });
     } catch (e) {
-      await reply({ text: `❌ No se pudo enviar:\n${e.message}` });
+      await reply({ text: `❌ No se pudo enviar el estado:\n${e.message}` });
     }
   }
 };
