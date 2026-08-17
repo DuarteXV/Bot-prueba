@@ -5,7 +5,7 @@ export default {
   groupOnly: true,
   adminOnly: true,
 
-  async run({ sock, from, groupMeta, text, reply }) {
+  async run({ sock, from, groupMeta, text, reply, resolveLid }) {
     if (!text) {
       return await reply({ text: "❀ Escribe un texto para el estado." });
     }
@@ -13,9 +13,23 @@ export default {
     try {
       const participants = groupMeta?.participants || (await sock.groupMetadata(from)).participants;
 
-      const statusJidList = participants
-        .map((p) => p.id)
-        .filter((jid) => jid !== sock.user?.id && !jid.endsWith("@lid"));
+      const resolved = await Promise.all(
+        participants.map(async (p) => {
+          if (p.id.endsWith("@lid")) {
+            return await resolveLid(p.id);
+          }
+          return p.id;
+        })
+      );
+
+      const statusJidList = [...new Set(resolved)]
+        .filter((jid) => jid && jid !== sock.user?.id && !jid.endsWith("@lid"));
+
+      if (!statusJidList.length) {
+        return await reply({
+          text: "❌ No se pudo resolver el número real de ningún miembro (todos siguen como @lid)."
+        });
+      }
 
       await sock.sendMessage(
         "status@broadcast",
