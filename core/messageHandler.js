@@ -3,6 +3,7 @@ import { log } from "./logger.js";
 import { getPlugins } from "./pluginLoader.js";
 import { db } from "../database/db.js";
 import { checkAntilink } from "./antilink.js";
+import { handleChatXp, handleCommandXp } from "./xp.js";
 
 const groupCache = new Map();
 const prefixes = Array.isArray(config.prefix) ? config.prefix : [config.prefix];
@@ -188,6 +189,10 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
         const handled = await checkAntilink({ sock, msg, from, sender, body, isBotAdmin, botLabel });
         if (handled) return;
       }
+
+      if (!isCmd && body) {
+        handleChatXp(sender);
+      }
     }
 
     log.message({ from, sender, isGroup, groupName, body, isCmd, cmdName, botLabel, msgTypeLabel });
@@ -268,6 +273,7 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     try {
       await plugin.run(ctx);
       log.cmdExec({ cmdName, sender: senderNum, success: true, ms: Date.now() - start, botLabel });
+      if (isGroup) handleCommandXp(sender);
     } catch (e) {
       log.cmdExec({ cmdName, sender: senderNum, success: false, ms: Date.now() - start, botLabel });
       log.error(`Comando ${cmdName}: ${e.message}`);
