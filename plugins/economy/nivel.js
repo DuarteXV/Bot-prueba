@@ -4,7 +4,7 @@ import { db } from "../../database/db.js";
 export default {
   name: ["nivel", "rank", "xp"],
   description: "Muestra tu nivel y XP",
-  category: "economia",
+  category: "economy",
 
   async run({ sender, reply }) {
     const user = db.getUser(sender);
