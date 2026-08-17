@@ -147,6 +147,11 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     const isMod = isOwner || isCoOwner || db.hasRole(senderNum, "mod");
     const isPremium = isMod || db.hasRole(senderNum, "premium");
 
+    const botData = db.getBot(botJid);
+    if (botData?.privateMode && !isOwner && !isCoOwner) {
+      return;
+    }
+
     let isAdmin = false;
     let isBotAdmin = false;
 
