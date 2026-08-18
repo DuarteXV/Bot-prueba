@@ -148,6 +148,7 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     const isPremium = isMod || db.hasRole(senderNum, "premium");
 
     const botData = db.getBot(botJid);
+    console.log("DEBUG privateMode:", { botJid, botData, isOwner, isCoOwner, senderNum });
     if (botData?.privateMode && !isOwner && !isCoOwner) {
       return;
     }
