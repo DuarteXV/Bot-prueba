@@ -3,26 +3,27 @@ import { db } from "../../database/db.js";
 
 export default {
   name: ["modeowner"],
-  description: 'Prende o apaga el modo privado usando "on" u "off"',
+  description: 'Prende o apaga el modo privado del grupo usando "on" u "off"',
   category: "owner",
+  groupOnly: true,
   ownerOnly: true,
 
-  async run({ botJid, args, react, reply }) {
+  async run({ from, args, react, reply }) {
     const accion = args[0]?.toLowerCase();
 
     if (accion === "on") {
-      db.setBot(botJid, { privateMode: true });
+      db.setGroup(from, { privateMode: true });
       await react("🔒");
       return await reply({
-        text: `🔒 *Modo Privado ACTIVADO.*\n\nA partir de ahora, *${config.botName}* ignorará los mensajes de usuarios comunes y grupos. Solo atenderá a los owners.`
+        text: `🔒 *Modo Privado ACTIVADO en este grupo.*\n\nA partir de ahora, *${config.botName}* ignorará los mensajes de usuarios comunes en este grupo. Solo atenderá a los owners.`
       });
     }
 
     if (accion === "off") {
-      db.setBot(botJid, { privateMode: false });
+      db.setGroup(from, { privateMode: false });
       await react("🔓");
       return await reply({
-        text: `🔓 *Modo Privado DESACTIVADO.*\n\nEl bot ha vuelto a la normalidad y responderá a todo el público.`
+        text: `🔓 *Modo Privado DESACTIVADO en este grupo.*\n\nEl bot ha vuelto a la normalidad y responderá a todo el público.`
       });
     }
 
