@@ -12,6 +12,8 @@ const tmp = path.join(__dirname, '../../tmp')
 
 if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
 
+console.log('🟢 brat.js cargado correctamente')
+
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 async function fetchBratImage(text, attempt = 1) {
@@ -103,6 +105,8 @@ export default {
   ownerOnly: false,
 
   async run({ sock, from, msg, senderNum, args, command, react, reply }) {
+    console.log('🟡 Comando ejecutado:', command, '| args:', args)
+
     try {
       await react('🕒')
 
@@ -121,18 +125,27 @@ export default {
           ? await fetchBratImage(txt)
           : await fetchBratVideo(txt)
 
-        // 🐛 DEBUG: mandamos al chat qué llegó realmente de la API
-        const preview = buffer.slice(0, 200).toString('utf-8').replace(/[^\x20-\x7E]/g, '.')
-        await reply({
-          text: `🐛 *DEBUG*\nTamaño buffer: ${buffer.length} bytes\nPrimeros bytes:\n\`\`\`${preview}\`\`\``
-        })
+        console.log('🟣 Buffer recibido:', buffer.length, 'bytes')
 
-        const webpBuffer = await convertirWebp(buffer, command === 'bratv')
-        const stickerFinal = await addExif(webpBuffer, packname, author)
+        // 🐛 TEST: manda la imagen/video cruda, sin convertir a sticker
+        if (command === 'brat') {
+          await sock.sendMessage(from, {
+            image: buffer,
+            caption: `🐛 Buffer recibido: ${buffer.length} bytes`
+          }, { quoted: msg })
+        } else {
+          await sock.sendMessage(from, {
+            video: buffer,
+            caption: `🐛 Buffer recibido: ${buffer.length} bytes`
+          }, { quoted: msg })
+        }
+        return // corta acá para no seguir al ffmpeg todavía
 
-        await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
-        await react('✅')
-        return
+        // ---- código original de conversión a sticker (desactivado mientras probamos) ----
+        // const webpBuffer = await convertirWebp(buffer, command === 'bratv')
+        // const stickerFinal = await addExif(webpBuffer, packname, author)
+        // await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
+        // await react('✅')
       }
 
       if (command === 'qc') {
@@ -168,17 +181,24 @@ export default {
         const json = await axios.post('https://bot.lyo.su/quote/generate', quoteObj)
         const buffer = Buffer.from(json.data.result.image, 'base64')
 
-        // 🐛 DEBUG
-        await reply({ text: `🐛 *DEBUG qc*\nTamaño buffer: ${buffer.length} bytes` })
+        console.log('🟣 Buffer qc recibido:', buffer.length, 'bytes')
 
-        const webpBuffer = await convertirWebp(buffer, false)
-        const stickerFinal = await addExif(webpBuffer, packname, author)
+        // 🐛 TEST: manda la imagen cruda
+        await sock.sendMessage(from, {
+          image: buffer,
+          caption: `🐛 Buffer qc: ${buffer.length} bytes`
+        }, { quoted: msg })
+        return // corta acá para no seguir al ffmpeg todavía
 
-        await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
-        await react('✅')
+        // ---- código original de conversión a sticker (desactivado mientras probamos) ----
+        // const webpBuffer = await convertirWebp(buffer, false)
+        // const stickerFinal = await addExif(webpBuffer, packname, author)
+        // await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
+        // await react('✅')
       }
 
     } catch (error) {
+      console.error('🔴 Error completo:', error)
       await react('❌')
       await reply({ text: `❌ *Error:* ${error.message}\n\n🐛 *Stack:*\n\`\`\`${error.stack?.slice(0, 500)}\`\`\`` })
     }
