@@ -121,6 +121,12 @@ export default {
           ? await fetchBratImage(txt)
           : await fetchBratVideo(txt)
 
+        // 🐛 DEBUG: mandamos al chat qué llegó realmente de la API
+        const preview = buffer.slice(0, 200).toString('utf-8').replace(/[^\x20-\x7E]/g, '.')
+        await reply({
+          text: `🐛 *DEBUG*\nTamaño buffer: ${buffer.length} bytes\nPrimeros bytes:\n\`\`\`${preview}\`\`\``
+        })
+
         const webpBuffer = await convertirWebp(buffer, command === 'bratv')
         const stickerFinal = await addExif(webpBuffer, packname, author)
 
@@ -162,6 +168,9 @@ export default {
         const json = await axios.post('https://bot.lyo.su/quote/generate', quoteObj)
         const buffer = Buffer.from(json.data.result.image, 'base64')
 
+        // 🐛 DEBUG
+        await reply({ text: `🐛 *DEBUG qc*\nTamaño buffer: ${buffer.length} bytes` })
+
         const webpBuffer = await convertirWebp(buffer, false)
         const stickerFinal = await addExif(webpBuffer, packname, author)
 
@@ -171,8 +180,7 @@ export default {
 
     } catch (error) {
       await react('❌')
-      await reply({ text: `❌ ${error.message}` })
-      console.error('Error en brat/bratv/qc:', error)
+      await reply({ text: `❌ *Error:* ${error.message}\n\n🐛 *Stack:*\n\`\`\`${error.stack?.slice(0, 500)}\`\`\`` })
     }
   }
 }
