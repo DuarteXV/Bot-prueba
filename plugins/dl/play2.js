@@ -24,7 +24,7 @@ export default {
       }
 
       const apis = [
-        `https://api.lempi.lat/dl/ytv?url=${encodeURIComponent(videoUrl)}&apikey=Duarte-1311`,
+        `https://api.lempi.lat/dl/ytv?url=${encodeURIComponent(videoUrl)}&apikey=Duarte-1311-2026`,
       ]
 
       let data = null
