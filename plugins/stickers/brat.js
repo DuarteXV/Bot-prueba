@@ -12,8 +12,6 @@ const tmp = path.join(__dirname, '../../tmp')
 
 if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
 
-console.log('🟢 brat.js cargado correctamente')
-
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 async function fetchBratImage(text, attempt = 1) {
@@ -33,15 +31,61 @@ async function fetchBratImage(text, attempt = 1) {
   }
 }
 
+async function addExif(webpBuffer, packname, author) {
+  const { default: webp } = await import('node-webpmux')
+  const img = new webp.Image()
+
+  const json = {
+    'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
+    'sticker-pack-name': packname,
+    'sticker-pack-publisher': author,
+    emojis: ['⚔️']
+  }
+
+  const exifAttr = Buffer.from([
+    0x49, 0x49, 0x2A, 0x00,
+    0x08, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x41, 0x57,
+    0x07, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x16, 0x00,
+    0x00, 0x00
+  ])
+
+  const jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8')
+  const exif = Buffer.concat([exifAttr, jsonBuffer])
+  exif.writeUIntLE(jsonBuffer.length, 14, 4)
+
+  await img.load(webpBuffer)
+  img.exif = exif
+
+  return await img.save(null)
+}
+
+async function convertirWebp(buffer) {
+  const id = crypto.randomBytes(8).toString('hex')
+  const inputP = path.join(tmp, `stk_${id}.png`)
+  const outP = path.join(tmp, `stk_${id}.webp`)
+
+  fs.writeFileSync(inputP, buffer)
+
+  try {
+    await execAsync(
+      `ffmpeg -i "${inputP}" -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -c:v libwebp -lossless 0 -q:v 80 "${outP}" -y`
+    )
+    return fs.readFileSync(outP)
+  } finally {
+    try { fs.unlinkSync(inputP) } catch {}
+    try { fs.unlinkSync(outP) } catch {}
+  }
+}
+
 export default {
   name: ['brat'],
-  description: 'Crea sticker estilo brat (texto en fondo blanco) — MODO TEST',
+  description: 'Crea sticker estilo brat (texto en fondo blanco)',
   category: 'stickers',
   ownerOnly: false,
 
-  async run({ sock, from, msg, senderNum, args, command, react, reply }) {
-    console.log('🟡 Comando ejecutado:', command, '| args:', args)
-
+  async run({ sock, from, msg, senderNum, args, react, reply }) {
     try {
       await react('🕒')
 
@@ -53,21 +97,16 @@ export default {
       }
 
       const buffer = await fetchBratImage(txt)
+      const webpBuffer = await convertirWebp(buffer)
+      const stickerFinal = await addExif(webpBuffer, '⚔️ Yuta Okotsu MD', `@${msg.pushName || senderNum}`)
 
-      console.log('🟣 Buffer recibido:', buffer.length, 'bytes')
-
-      // 🐛 TEST: manda la imagen cruda, sin convertir a sticker
-      await sock.sendMessage(from, {
-        image: buffer,
-        caption: `🐛 Buffer recibido: ${buffer.length} bytes`
-      }, { quoted: msg })
-
+      await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
       await react('✅')
 
     } catch (error) {
-      console.error('🔴 Error completo:', error)
+      console.error('🔴 Error en brat:', error)
       await react('❌')
-      await reply({ text: `❌ *Error:* ${error.message}\n\n🐛 *Stack:*\n\`\`\`${error.stack?.slice(0, 500)}\`\`\`` })
+      await reply({ text: `❌ *Error:* ${error.message}` })
     }
   }
 }
