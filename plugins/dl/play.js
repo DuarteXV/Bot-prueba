@@ -1,7 +1,7 @@
 import axios from "axios";
 import yts from "yt-search";
 
-const API_KEY = "Duarte-1311-2026";
+const API_KEY = "lem_749b2c22001c83ba07481006894265c951f25fc5";
 
 export default {
   name: ["play", "yta", "ytmp3", "playaudio"],
