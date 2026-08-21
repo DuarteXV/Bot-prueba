@@ -1,23 +1,27 @@
 export default {
   name: ["linkgc", "gclink", "linkgroup"],
-  description: "Obtiene el link del grupo",
-  category: 'grupos',
+  description: "Genera la tarjeta de invitación al grupo",
+  category: "grupos",
   groupOnly: true,
   adminOnly: true,
+  botAdmin: true,
 
-  async run({ sock, from, reply }) {
+  async run({ sock, from, groupMeta, reply }) {
     try {
-      const code = await sock.groupInviteCode(from);
-      const link = `https://chat.whatsapp.com/${code}`;
+      const metadata = groupMeta || (await sock.groupMetadata(from));
+      const inviteCode = await sock.groupInviteCode(from);
 
-      await reply({
-        text: `🔗 *Link del grupo:*\n${link}`
+      await sock.sendMessage(from, {
+        groupInvite: {
+          inviteCode,
+          jid: from,
+          subject: metadata.subject,
+          inviteExpiration: Date.now() + 3 * 24 * 60 * 60 * 1000,
+          text: `¡Únete a ${metadata.subject}!`
+        }
       });
-
     } catch (e) {
-      await reply({
-        text: "❌ No pude obtener el link del grupo."
-      });
+      await reply({ text: `❌ No pude obtener el link del grupo:\n${e.message}` });
     }
   }
 };
