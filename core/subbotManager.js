@@ -12,8 +12,6 @@ export const activeBots = new Map();
 const workers = new Map();
 let mainSock = null;
 
-// Comprueba si la sesión realmente terminó de vincularse (creds.registered)
-// en vez de solo mirar si el archivo auth.db existe.
 function isSessionRegistered(sessionDir) {
   const dbPath = path.join(sessionDir, "auth.db");
   if (!fs.existsSync(dbPath)) return false;
@@ -88,7 +86,6 @@ export function removeSubbot(id) {
   }
 }
 
-// Lógica común de reconexión/limpieza para ambos flujos de lanzamiento
 function handleWorkerExit(id) {
   workers.delete(id);
   const sessionDir2 = `${SUBBOTS_DIR}/${id}`;
@@ -158,15 +155,11 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
     workers.set(id, worker);
 
     const timeout = setTimeout(() => {
-      // Si tarda demasiado en generar el code, algo va mal con el socket:
-      // no dejamos el worker huérfano, lo terminamos.
       worker.terminate();
       workers.delete(id);
       reject(new Error("Timeout esperando código"));
     }, 15000);
 
-    // El pairing code de WhatsApp expira ~60s después de generado, así que
-    // 70s es tiempo de sobra para saber si el usuario lo usó o no.
     const cleanupTimeout = setTimeout(() => {
       const bot = db.getBot(id);
       if (!bot || bot.status !== "online") {
@@ -189,9 +182,10 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
           clearTimeout(cleanupTimeout);
           const userNum = id.replace("sub_", "");
           const userJid = subJid || `${userNum}@s.whatsapp.net`;
-          sock.sendMessage(userJid, {
-            text: "📍 *Has vinculado un subbot con éxito*\n" +
-              "> • Puedes usar *.delbot* para desvincularlo cuando quieras."
+          sock.sendMessage(from, {
+            text: `📍 *@${userNum} ha vinculado un subbot con éxito*\n` +
+              "> • Puedes usar *.delbot* para desvincularlo cuando quieras.",
+            mentions: [userJid]
           }).catch(e => log.error(`[MANAGER] Error enviando mensaje de éxito: ${e.message}`));
         }
       }
@@ -238,7 +232,6 @@ export function launchAllSubbots() {
     if (isSessionRegistered(sessionDir)) {
       launchSubbot(id);
     } else {
-      // Sesión abandonada de una vinculación que nunca se completó
       log.warn(`[MANAGER] ${id} nunca completó vinculación — eliminando sesión huérfana`);
       fs.rmSync(sessionDir, { recursive: true, force: true });
     }
