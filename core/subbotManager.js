@@ -36,6 +36,11 @@ export function registerMainBot(sock, label = "MAIN") {
   activeBots.set("main", { label, jid, status, isMain: true });
 
   if (jid) {
+    const oldMains = db.getAllBots().filter(b => b.isMain && b.jid !== jid);
+    for (const old of oldMains) {
+      db.setBot(old.jid, { isMain: false, status: "offline" }, true);
+    }
+
     db.setBot(jid, { label, jid, status, isMain: true });
     global.mainBotNum = jid.split("@")[0];
   }
@@ -47,6 +52,11 @@ export function registerMainBot(sock, label = "MAIN") {
         const currentRawJid = sock.user?.id || "";
         const currentJid = currentRawJid ? currentRawJid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : "";
         if (currentJid) {
+          const oldMains = db.getAllBots().filter(b => b.isMain && b.jid !== currentJid);
+          for (const old of oldMains) {
+            db.setBot(old.jid, { isMain: false, status: "offline" }, true);
+          }
+
           activeBots.set("main", { label, jid: currentJid, status: "online", isMain: true });
           db.setBot(currentJid, { label, jid: currentJid, status: "online", isMain: true });
           global.mainBotNum = currentJid.split("@")[0];
