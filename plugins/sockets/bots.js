@@ -34,7 +34,6 @@ export default {
         }
       };
 
-      // 1. Participantes del grupo actual, resolviendo LIDs a número real
       const metadata = groupMeta || (await sock.groupMetadata(from));
 
       const participantesGrupo = await Promise.all(
@@ -47,17 +46,10 @@ export default {
         })
       );
 
-      // 2. Datos del bot Principal
-      const todosLosBots = db.getAllBots ? db.getAllBots() : [];
-      const registroMain = todosLosBots.find((b) => (b.isMain === true || b.isMain === 1) && b.jid);
-
-      const numeroPrincipal = registroMain
-        ? limpiarNumero(registroMain.jid)
-        : (global.mainBotNum || limpiarNumero(sock?.user?.id));
-
+      // El principal es directamente quién está conectado AHORA, no lo que diga la DB
+      const numeroPrincipal = limpiarNumero(sock.user?.id);
       const nombrePrincipal = obtenerNombre(numeroPrincipal);
 
-      // 3. Obtener el total global y filtrar los del grupo
       const subbotsDir = "./sessions/subbots";
       let todosLosSubbots = [];
       let subbotsEnGrupo = [];
