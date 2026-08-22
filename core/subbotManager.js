@@ -132,7 +132,11 @@ export function launchSubbot(id) {
     }
   });
 
-  worker.on("exit", () => handleWorkerExit(id));
+  worker.on("exit", () => {
+    if (workers.get(id) === worker) {
+      handleWorkerExit(id);
+    }
+  });
 
   worker.on("error", (err) => {
     log.error(`[MANAGER] Worker ${id} error: ${err.message}`);
@@ -156,7 +160,7 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
 
     const timeout = setTimeout(() => {
       worker.terminate();
-      workers.delete(id);
+      if (workers.get(id) === worker) workers.delete(id);
       reject(new Error("Timeout esperando código"));
     }, 15000);
 
@@ -205,14 +209,15 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
     worker.on("exit", () => {
       clearTimeout(timeout);
       clearTimeout(cleanupTimeout);
-      handleWorkerExit(id);
+      if (workers.get(id) === worker) {
+        handleWorkerExit(id);
+      }
     });
 
     worker.on("error", (err) => {
       clearTimeout(timeout);
       clearTimeout(cleanupTimeout);
-      worker.terminate();
-      workers.delete(id);
+      if (workers.get(id) === worker) workers.delete(id);
       reject(err);
     });
   });
