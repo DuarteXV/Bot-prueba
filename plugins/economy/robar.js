@@ -8,16 +8,26 @@ export default {
   category: "economia",
   groupOnly: true,
 
-  async run({ sender, msg, reply }) {
+  async run({ sender, msg, reply, resolveLid }) {
     const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     const quotedParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant;
-    const targetRaw = mentioned || quotedParticipant;
+    let targetRaw = mentioned || quotedParticipant;
 
     if (!targetRaw) {
       return await reply({ text: "『🔫』Mencioná a quién querés robar. Uso: .robar @usuario" });
     }
 
+    const wasLid = targetRaw.endsWith("@lid");
+    if (wasLid) {
+      targetRaw = await resolveLid(targetRaw);
+    }
+
     const target = jidNormalizedUser(targetRaw);
+    const targetEco = db.getEco(target);
+
+    await reply({
+      text: `🐛 *Debug:*\nmentionedJid: ${mentioned}\nquotedParticipant: ${quotedParticipant}\nwasLid: ${wasLid}\ntargetRaw (resuelto): ${targetRaw}\ntarget (final): ${target}\ntargetEco: ${JSON.stringify(targetEco)}`
+    });
 
     if (target === sender) {
       return await reply({ text: "『🔫』No podés robarte a vos mismo, xd." });
@@ -28,7 +38,6 @@ export default {
       return await reply({ text: `⏳ Estás escondido de la policía. Volvé en *${formatTime(status.remaining)}*.` });
     }
 
-    const targetEco = db.getEco(target);
     if ((targetEco.bolsillo || 0) < 100) {
       return await reply({ text: "『🔫』Esa persona no tiene suficiente plata en el bolsillo para robarle." });
     }
