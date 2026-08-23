@@ -16,7 +16,20 @@ if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
 
 const clean = (value) => typeof value === 'string' ? value.trim() : ''
 
-function getStickerMeta(senderNum, pushName) {
+function getBotLabel(botJid) {
+  const bot = db.getBot(botJid)
+  if (
+    bot?.label &&
+    bot.label !== 'Subbot' &&
+    bot.label !== 'MAIN' &&
+    !bot.label.startsWith('SUB_')
+  ) {
+    return bot.label
+  }
+  return null
+}
+
+function getStickerMeta(senderNum, pushName, botJid) {
   const user = db.getUser(senderNum) || {}
 
   const userPack = clean(user.text1)
@@ -25,10 +38,11 @@ function getStickerMeta(senderNum, pushName) {
   const hasUserMeta = Boolean(userPack || userAuthor)
 
   const nombre = pushName || senderNum
+  const botLabel = getBotLabel(botJid)
 
   return {
     hasUserMeta,
-    packname: userPack || config.botname,
+    packname: userPack || botLabel || config.botname,
     author: userAuthor || `@${nombre}`
   }
 }
@@ -160,7 +174,8 @@ export default {
       await react('🕒')
 
       const pushName = msg.pushName || senderNum
-      let { hasUserMeta, packname, author } = getStickerMeta(senderNum, pushName)
+      const botJid = sock.user?.id ? sock.user.id.split(':')[0].split('@')[0] + '@s.whatsapp.net' : ''
+      let { hasUserMeta, packname, author } = getStickerMeta(senderNum, pushName, botJid)
 
       if (!hasUserMeta) {
         const tempMeta = parseTempMeta(args, packname, author)
