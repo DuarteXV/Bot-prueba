@@ -105,6 +105,8 @@ async function processVideoForWhatsApp(buffer) {
   }
 }
 
+const MAX_INPUT_MB = 200;
+
 export default {
   name: ['tiktok', 'tt'],
   description: 'Descarga videos de TikTok rápido',
@@ -138,14 +140,24 @@ export default {
 
       let buffer = await descargarBuffer(result.videoUrl);
       const sizeMB = buffer.length / (1024 * 1024);
+      await reply({ text: `🐛 Buffer descargado: ${sizeMB.toFixed(1)}MB` });
+
+      if (sizeMB > MAX_INPUT_MB) {
+        await react('❌');
+        return await reply({
+          text: `❌ El video pesa ${sizeMB.toFixed(0)}MB, demasiado grande para procesar (límite: ${MAX_INPUT_MB}MB).`
+        });
+      }
 
       if (sizeMB > 60) {
-        await reply({ text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB, comprimiendo antes de enviar...` });
+        await reply({ text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB, comprimiendo antes de enviar (esto puede tardar unos minutos)...` });
       }
 
       try {
         buffer = await processVideoForWhatsApp(buffer);
+        await reply({ text: `🐛 Procesado. Nuevo tamaño: ${(buffer.length / (1024 * 1024)).toFixed(1)}MB` });
       } catch (e) {
+        await reply({ text: `🐛 Error procesando: ${e.message}` });
         console.error('No se pudo procesar el video, se manda el original:', e.message);
       }
 
@@ -161,6 +173,8 @@ export default {
       caption += `*○ ᴄᴏᴍᴍᴇɴᴛ:* ${result.comments ?? 'N/A'}\n`;
       caption += `*📹 ᴛɪᴛᴜʟᴏ:* ${titulo}`;
 
+      await reply({ text: `🐛 Intentando enviar video final...` });
+
       await sock.sendMessage(from, {
         video: buffer,
         mimetype: 'video/mp4',
@@ -168,13 +182,15 @@ export default {
         caption
       }, { quoted: msg });
 
+      await reply({ text: `🐛 sendMessage terminó sin tirar error` });
+
       await react('✅');
 
     } catch (error) {
       console.error('Error en TikTok download:', error);
       await react('❌');
       await reply({
-        text: `❌ Error al procesar la descarga: ${error.message}`
+        text: `❌ Error al procesar la descarga: ${error.message}\n\n🐛 Stack:\n${error.stack?.slice(0, 500)}`
       });
     }
   }
