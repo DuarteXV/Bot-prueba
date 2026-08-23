@@ -28,7 +28,7 @@ function getStickerMeta(senderNum, pushName) {
 
   return {
     hasUserMeta,
-    packname: userPack || clean(config.botname) || '⚔️ Yuta Okotsu MD',
+    packname: userPack || config.botname,
     author: userAuthor || `@${nombre}`
   }
 }
