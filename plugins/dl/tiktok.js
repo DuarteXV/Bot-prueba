@@ -105,7 +105,7 @@ async function processVideoForWhatsApp(buffer) {
   }
 }
 
-const MAX_INPUT_MB = 200;
+const MAX_INPUT_MB = 500;
 
 export default {
   name: ['tiktok', 'tt'],
