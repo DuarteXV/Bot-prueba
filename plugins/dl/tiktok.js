@@ -1,4 +1,16 @@
 import axios from 'axios';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+
+const execAsync = promisify(exec);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const tmp = path.join(__dirname, '../../tmp');
+
+if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true });
 
 function validateTikTokUrl(url) {
   if (!url) return null;
@@ -51,6 +63,22 @@ async function descargarBuffer(url) {
   return Buffer.from(data);
 }
 
+async function fixFaststart(buffer) {
+  const id = crypto.randomBytes(8).toString('hex');
+  const inputP = path.join(tmp, `tt_${id}.mp4`);
+  const outP = path.join(tmp, `tt_${id}_fixed.mp4`);
+
+  fs.writeFileSync(inputP, buffer);
+
+  try {
+    await execAsync(`ffmpeg -i "${inputP}" -c copy -movflags +faststart "${outP}" -y`);
+    return fs.readFileSync(outP);
+  } finally {
+    try { fs.unlinkSync(inputP); } catch {}
+    try { fs.unlinkSync(outP); } catch {}
+  }
+}
+
 export default {
   name: ['tiktok', 'tt'],
   description: 'Descarga videos de TikTok rápido',
@@ -82,7 +110,14 @@ export default {
         return await reply({ text: `❌ No se pudo descargar el video. El enlace podría ser privado o no válido.` });
       }
 
-      const buffer = await descargarBuffer(result.videoUrl);
+      let buffer = await descargarBuffer(result.videoUrl);
+
+      try {
+        buffer = await fixFaststart(buffer);
+      } catch (e) {
+        console.error('No se pudo reparar faststart, se manda el original:', e.message);
+      }
+
       const titulo = result.title?.trim() || 'Sin título';
 
       let caption = `☑ *Video de TikTok descargado*\n`;
