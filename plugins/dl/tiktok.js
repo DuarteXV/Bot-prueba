@@ -70,12 +70,13 @@ async function processVideoForWhatsApp(buffer) {
   const passLogP = path.join(tmp, `tt_${id}_pass`);
 
   fs.writeFileSync(inputP, buffer);
+  buffer = null;
 
   const MAX_SIZE_MB = 60;
-  const sizeMB = buffer.length / (1024 * 1024);
+  const originalSizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
   try {
-    if (sizeMB <= MAX_SIZE_MB) {
+    if (originalSizeMB <= MAX_SIZE_MB) {
       await execAsync(`ffmpeg -i "${inputP}" -c copy -movflags +faststart "${outP}" -y`);
       return fs.readFileSync(outP);
     }
@@ -89,11 +90,14 @@ async function processVideoForWhatsApp(buffer) {
     const audioBitrate = 128;
     const videoBitrate = Math.floor(targetSizeBits / duration / 1000) - audioBitrate;
 
+    const scale = `-vf "scale='min(1920,iw)':-2"`;
+    const limitMem = `-threads 1`;
+
     await execAsync(
-      `ffmpeg -i "${inputP}" -c:v libx264 -b:v ${videoBitrate}k -pass 1 -passlogfile "${passLogP}" -an -f null /dev/null -y`
+      `ffmpeg -i "${inputP}" ${scale} ${limitMem} -c:v libx264 -b:v ${videoBitrate}k -preset ultrafast -pass 1 -passlogfile "${passLogP}" -an -f null /dev/null -y`
     );
     await execAsync(
-      `ffmpeg -i "${inputP}" -c:v libx264 -b:v ${videoBitrate}k -pass 2 -passlogfile "${passLogP}" -preset medium -c:a aac -b:a ${audioBitrate}k -movflags +faststart "${outP}" -y`
+      `ffmpeg -i "${inputP}" ${scale} ${limitMem} -c:v libx264 -b:v ${videoBitrate}k -preset ultrafast -pass 2 -passlogfile "${passLogP}" -c:a aac -b:a ${audioBitrate}k -movflags +faststart "${outP}" -y`
     );
 
     return fs.readFileSync(outP);
@@ -140,10 +144,10 @@ export default {
 
       let buffer = await descargarBuffer(result.videoUrl);
       const sizeMB = buffer.length / (1024 * 1024);
-      await reply({ text: `🐛 Buffer descargado: ${sizeMB.toFixed(1)}MB` });
 
       if (sizeMB > MAX_INPUT_MB) {
         await react('❌');
+        buffer = null;
         return await reply({
           text: `❌ El video pesa ${sizeMB.toFixed(0)}MB, demasiado grande para procesar (límite: ${MAX_INPUT_MB}MB).`
         });
@@ -155,9 +159,7 @@ export default {
 
       try {
         buffer = await processVideoForWhatsApp(buffer);
-        await reply({ text: `🐛 Procesado. Nuevo tamaño: ${(buffer.length / (1024 * 1024)).toFixed(1)}MB` });
       } catch (e) {
-        await reply({ text: `🐛 Error procesando: ${e.message}` });
         console.error('No se pudo procesar el video, se manda el original:', e.message);
       }
 
@@ -173,8 +175,6 @@ export default {
       caption += `*○ ᴄᴏᴍᴍᴇɴᴛ:* ${result.comments ?? 'N/A'}\n`;
       caption += `*📹 ᴛɪᴛᴜʟᴏ:* ${titulo}`;
 
-      await reply({ text: `🐛 Intentando enviar video final...` });
-
       await sock.sendMessage(from, {
         video: buffer,
         mimetype: 'video/mp4',
@@ -182,15 +182,13 @@ export default {
         caption
       }, { quoted: msg });
 
-      await reply({ text: `🐛 sendMessage terminó sin tirar error` });
-
       await react('✅');
 
     } catch (error) {
       console.error('Error en TikTok download:', error);
       await react('❌');
       await reply({
-        text: `❌ Error al procesar la descarga: ${error.message}\n\n🐛 Stack:\n${error.stack?.slice(0, 500)}`
+        text: `❌ Error al procesar la descarga: ${error.message}`
       });
     }
   }
