@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import axios from 'axios'
+import config from '../../config.js'
 
 const execAsync = promisify(exec)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -98,7 +99,7 @@ export default {
 
       const buffer = await fetchBratImage(txt)
       const webpBuffer = await convertirWebp(buffer)
-      const stickerFinal = await addExif(webpBuffer, '⚔️ Yuta Okotsu MD', `@${msg.pushName || senderNum}`)
+      const stickerFinal = await addExif(webpBuffer, config.botname, `@${msg.pushName || senderNum}`)
 
       await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
       await react('✅')
