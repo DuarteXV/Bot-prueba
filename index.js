@@ -8,11 +8,12 @@ import path from "path";
 
 process.removeAllListeners("warning");
 
-const tmpDir = "./tmp";
-if (fs.existsSync(tmpDir)) {
-  for (const file of fs.readdirSync(tmpDir)) {
-    try { fs.unlinkSync(path.join(tmpDir, file)) } catch {}
-  }
+const tmpDir = path.resolve("./tmp");
+if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+process.env.TMPDIR = tmpDir;
+
+for (const file of fs.readdirSync(tmpDir)) {
+  try { fs.unlinkSync(path.join(tmpDir, file)) } catch {}
 }
 
 setInterval(() => {
