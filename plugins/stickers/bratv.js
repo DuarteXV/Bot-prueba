@@ -6,12 +6,26 @@ import { exec } from 'child_process'
 import { promisify } from 'util'
 import axios from 'axios'
 import config from '../../config.js'
+import { db } from '../../database/db.js'
 
 const execAsync = promisify(exec)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const tmp = path.join(__dirname, '../../tmp')
 
 if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
+
+function getBotLabel(botJid) {
+  const bot = db.getBot(botJid)
+  if (
+    bot?.label &&
+    bot.label !== 'Subbot' &&
+    bot.label !== 'MAIN' &&
+    !bot.label.startsWith('SUB_')
+  ) {
+    return bot.label
+  }
+  return null
+}
 
 async function fetchBratVideo(text) {
   const response = await axios.get('https://skyzxu-brat.hf.space/brat-animated', {
@@ -94,9 +108,12 @@ export default {
         return reply({ text: '❌ Escribe un texto para crear el sticker animado.\n\n💡 *.bratv <texto>*' })
       }
 
+      const botJid = sock.user?.id ? sock.user.id.split(':')[0].split('@')[0] + '@s.whatsapp.net' : ''
+      const packname = getBotLabel(botJid) || config.botname
+
       const buffer = await fetchBratVideo(txt)
       const webpBuffer = await convertirWebpVideo(buffer)
-      const stickerFinal = await addExif(webpBuffer, config.botname, `@${msg.pushName || senderNum}`)
+      const stickerFinal = await addExif(webpBuffer, packname, `@${msg.pushName || senderNum}`)
 
       await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
       await react('✅')
