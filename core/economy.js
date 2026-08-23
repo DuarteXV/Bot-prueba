@@ -4,7 +4,9 @@ const COOLDOWNS = {
   daily: 24 * 60 * 60 * 1000,
   weekly: 7 * 24 * 60 * 60 * 1000,
   monthly: 30 * 24 * 60 * 60 * 1000,
-  rob: 2 * 60 * 60 * 1000
+  rob: 2 * 60 * 60 * 1000,
+  mendigar: 30 * 60 * 1000,
+  crimen: 2 * 60 * 60 * 1000
 };
 
 export function formatTime(ms) {
@@ -17,9 +19,9 @@ export function formatTime(ms) {
 }
 
 export function checkCooldown(jid, key) {
-  const eco = db.getEco(jid);
+  const user = db.getUser(jid);
   const lastKey = `last${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-  const last = eco[lastKey] || 0;
+  const last = user[lastKey] || 0;
   const cooldown = COOLDOWNS[key];
   const diff = Date.now() - last;
 
@@ -31,10 +33,10 @@ export function checkCooldown(jid, key) {
 
 export function setCooldown(jid, key) {
   const lastKey = `last${key.charAt(0).toUpperCase()}${key.slice(1)}`;
-  db.setEco(jid, { [lastKey]: Date.now() });
+  db.setUser(jid, { [lastKey]: Date.now() });
 }
 
 export function addBolsillo(jid, amount) {
-  const eco = db.getEco(jid);
-  db.setEco(jid, { bolsillo: (eco.bolsillo || 0) + amount });
+  const user = db.getUser(jid);
+  db.setUser(jid, { bolsillo: (user.bolsillo || 0) + amount });
 }
