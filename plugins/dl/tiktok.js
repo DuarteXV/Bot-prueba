@@ -63,19 +63,45 @@ async function descargarBuffer(url) {
   return Buffer.from(data);
 }
 
-async function fixFaststart(buffer) {
+async function processVideoForWhatsApp(buffer) {
   const id = crypto.randomBytes(8).toString('hex');
   const inputP = path.join(tmp, `tt_${id}.mp4`);
-  const outP = path.join(tmp, `tt_${id}_fixed.mp4`);
+  const outP = path.join(tmp, `tt_${id}_out.mp4`);
+  const passLogP = path.join(tmp, `tt_${id}_pass`);
 
   fs.writeFileSync(inputP, buffer);
 
+  const MAX_SIZE_MB = 60;
+  const sizeMB = buffer.length / (1024 * 1024);
+
   try {
-    await execAsync(`ffmpeg -i "${inputP}" -c copy -movflags +faststart "${outP}" -y`);
+    if (sizeMB <= MAX_SIZE_MB) {
+      await execAsync(`ffmpeg -i "${inputP}" -c copy -movflags +faststart "${outP}" -y`);
+      return fs.readFileSync(outP);
+    }
+
+    const { stdout } = await execAsync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
+    );
+    const duration = parseFloat(stdout.trim());
+
+    const targetSizeBits = MAX_SIZE_MB * 8 * 1024 * 1024 * 0.92;
+    const audioBitrate = 128;
+    const videoBitrate = Math.floor(targetSizeBits / duration / 1000) - audioBitrate;
+
+    await execAsync(
+      `ffmpeg -i "${inputP}" -c:v libx264 -b:v ${videoBitrate}k -pass 1 -passlogfile "${passLogP}" -an -f null /dev/null -y`
+    );
+    await execAsync(
+      `ffmpeg -i "${inputP}" -c:v libx264 -b:v ${videoBitrate}k -pass 2 -passlogfile "${passLogP}" -preset medium -c:a aac -b:a ${audioBitrate}k -movflags +faststart "${outP}" -y`
+    );
+
     return fs.readFileSync(outP);
   } finally {
     try { fs.unlinkSync(inputP); } catch {}
     try { fs.unlinkSync(outP); } catch {}
+    try { fs.unlinkSync(`${passLogP}-0.log`); } catch {}
+    try { fs.unlinkSync(`${passLogP}-0.log.mbtree`); } catch {}
   }
 }
 
@@ -111,11 +137,16 @@ export default {
       }
 
       let buffer = await descargarBuffer(result.videoUrl);
+      const sizeMB = buffer.length / (1024 * 1024);
+
+      if (sizeMB > 60) {
+        await reply({ text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB, comprimiendo antes de enviar...` });
+      }
 
       try {
-        buffer = await fixFaststart(buffer);
+        buffer = await processVideoForWhatsApp(buffer);
       } catch (e) {
-        console.error('No se pudo reparar faststart, se manda el original:', e.message);
+        console.error('No se pudo procesar el video, se manda el original:', e.message);
       }
 
       const titulo = result.title?.trim() || 'Sin título';
