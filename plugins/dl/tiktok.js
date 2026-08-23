@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { pipeline } from 'stream/promises';
 
 const execAsync = promisify(exec);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,61 +53,41 @@ async function downloadTikTokNormal(url) {
   }
 }
 
-async function descargarBuffer(url) {
-  const { data } = await axios.get(url, {
-    responseType: 'arraybuffer',
-    timeout: 30000,
+async function descargarAArchivo(url, destPath) {
+  const response = await axios.get(url, {
+    responseType: 'stream',
+    timeout: 60000,
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
   });
-  return Buffer.from(data);
+
+  await pipeline(response.data, fs.createWriteStream(destPath));
 }
 
-async function processVideoForWhatsApp(buffer) {
-  const id = crypto.randomBytes(8).toString('hex');
-  const inputP = path.join(tmp, `tt_${id}.mp4`);
-  const outP = path.join(tmp, `tt_${id}_out.mp4`);
-  const passLogP = path.join(tmp, `tt_${id}_pass`);
-
-  fs.writeFileSync(inputP, buffer);
-  buffer = null;
-
+async function processVideoFile(inputP, outP) {
   const MAX_SIZE_MB = 60;
   const originalSizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
-  try {
-    if (originalSizeMB <= MAX_SIZE_MB) {
-      await execAsync(`ffmpeg -i "${inputP}" -c copy -movflags +faststart "${outP}" -y`);
-      return fs.readFileSync(outP);
-    }
-
-    const { stdout } = await execAsync(
-      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
-    );
-    const duration = parseFloat(stdout.trim());
-
-    const targetSizeBits = MAX_SIZE_MB * 8 * 1024 * 1024 * 0.92;
-    const audioBitrate = 128;
-    const videoBitrate = Math.floor(targetSizeBits / duration / 1000) - audioBitrate;
-
-    const scale = `-vf "scale='min(1920,iw)':-2"`;
-    const limitMem = `-threads 1`;
-
-    await execAsync(
-      `ffmpeg -i "${inputP}" ${scale} ${limitMem} -c:v libx264 -b:v ${videoBitrate}k -preset ultrafast -pass 1 -passlogfile "${passLogP}" -an -f null /dev/null -y`
-    );
-    await execAsync(
-      `ffmpeg -i "${inputP}" ${scale} ${limitMem} -c:v libx264 -b:v ${videoBitrate}k -preset ultrafast -pass 2 -passlogfile "${passLogP}" -c:a aac -b:a ${audioBitrate}k -movflags +faststart "${outP}" -y`
-    );
-
-    return fs.readFileSync(outP);
-  } finally {
-    try { fs.unlinkSync(inputP); } catch {}
-    try { fs.unlinkSync(outP); } catch {}
-    try { fs.unlinkSync(`${passLogP}-0.log`); } catch {}
-    try { fs.unlinkSync(`${passLogP}-0.log.mbtree`); } catch {}
+  if (originalSizeMB <= MAX_SIZE_MB) {
+    await execAsync(`ffmpeg -i "${inputP}" -c copy -movflags +faststart "${outP}" -y`);
+    return;
   }
+
+  const { stdout } = await execAsync(
+    `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
+  );
+  const duration = parseFloat(stdout.trim());
+
+  const targetSizeBits = MAX_SIZE_MB * 8 * 1024 * 1024 * 0.9;
+  const audioBitrate = 128;
+  const videoBitrate = Math.max(300, Math.floor(targetSizeBits / duration / 1000) - audioBitrate);
+
+  await execAsync(
+    `ffmpeg -i "${inputP}" -vf "scale='min(1920,iw)':-2" -threads 1 -c:v libx264 -preset ultrafast ` +
+    `-b:v ${videoBitrate}k -maxrate ${videoBitrate}k -bufsize ${videoBitrate * 2}k ` +
+    `-c:a aac -b:a ${audioBitrate}k -movflags +faststart "${outP}" -y`
+  );
 }
 
 const MAX_INPUT_MB = 500;
@@ -134,6 +115,10 @@ export default {
     await react('🔄');
     await reply({ text: `> ✎...Descargando video.` });
 
+    const id = crypto.randomBytes(8).toString('hex');
+    const inputP = path.join(tmp, `tt_${id}.mp4`);
+    const outP = path.join(tmp, `tt_${id}_out.mp4`);
+
     try {
       const result = await downloadTikTokNormal(tiktokUrl);
 
@@ -142,23 +127,26 @@ export default {
         return await reply({ text: `❌ No se pudo descargar el video. El enlace podría ser privado o no válido.` });
       }
 
-      let buffer = await descargarBuffer(result.videoUrl);
-      const sizeMB = buffer.length / (1024 * 1024);
+      await descargarAArchivo(result.videoUrl, inputP);
+
+      const sizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
       if (sizeMB > MAX_INPUT_MB) {
         await react('❌');
-        buffer = null;
+        fs.unlinkSync(inputP);
         return await reply({
           text: `❌ El video pesa ${sizeMB.toFixed(0)}MB, demasiado grande para procesar (límite: ${MAX_INPUT_MB}MB).`
         });
       }
 
       if (sizeMB > 60) {
-        await reply({ text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB, comprimiendo antes de enviar (esto puede tardar unos minutos)...` });
+        await reply({ text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB, comprimiendo antes de enviar...` });
       }
 
+      let finalPath = inputP;
       try {
-        buffer = await processVideoForWhatsApp(buffer);
+        await processVideoFile(inputP, outP);
+        finalPath = outP;
       } catch (e) {
         console.error('No se pudo procesar el video, se manda el original:', e.message);
       }
@@ -176,7 +164,7 @@ export default {
       caption += `*📹 ᴛɪᴛᴜʟᴏ:* ${titulo}`;
 
       await sock.sendMessage(from, {
-        video: buffer,
+        video: { url: finalPath },
         mimetype: 'video/mp4',
         fileName: 'tiktok.mp4',
         caption
@@ -190,6 +178,9 @@ export default {
       await reply({
         text: `❌ Error al procesar la descarga: ${error.message}`
       });
+    } finally {
+      try { fs.unlinkSync(inputP); } catch {}
+      try { fs.unlinkSync(outP); } catch {}
     }
   }
 };
