@@ -1,5 +1,5 @@
 export default {
-  name: ["ping", "speed"],
+  name: ["ping", "p"],
   description: "Mide la latencia del bot",
   category: 'utils',
   ownerOnly: false,
