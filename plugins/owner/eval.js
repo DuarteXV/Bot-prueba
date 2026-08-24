@@ -27,7 +27,7 @@ export default {
         typeof result === "string" ? result : inspect(result, { depth: 2 });
 
       await reply({
-        text: `✅ *Resultado:*\n\`\`\`${out.slice(0, 4000) || "undefined"}\`\`\``,
+        text: `✅ *Resultado:*\n\`\`\`${out.slice(0, 400000) || "undefined"}\`\`\``,
       });
     } catch (e) {
       await reply({ text: `❌ *Error:*\n\`\`\`${e?.stack ?? e}\`\`\`` });
