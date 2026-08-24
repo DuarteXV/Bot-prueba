@@ -1,3 +1,11 @@
+import { exec } from "child_process";
+import { promisify } from "util";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
+
+const execAsync = promisify(exec);
+
 const SAMPLE_RATE = 44100;
 const DURACION_DEFAULT = 5;
 const FRECUENCIA_MIN = 20;
@@ -10,6 +18,8 @@ export default {
   ownerOnly: true,
 
   async run({ sock, from, msg, text, reply, react }) {
+    let wavPath, oggPath;
+
     try {
       if (!text.trim()) {
         return reply({
@@ -37,13 +47,25 @@ export default {
 
       const buffer = generarTonoWav(frecuencia, duracion);
 
+      const tmpDir = os.tmpdir();
+      const id = Date.now();
+      wavPath = path.join(tmpDir, `tono_${id}.wav`);
+      oggPath = path.join(tmpDir, `tono_${id}.ogg`);
+
+      await fs.writeFile(wavPath, buffer);
+
+      await execAsync(
+        `ffmpeg -y -i "${wavPath}" -c:a libopus -b:a 64k -vbr on -application voip "${oggPath}"`
+      );
+
+      const oggBuffer = await fs.readFile(oggPath);
+
       await sock.sendMessage(
         from,
         {
-          audio: buffer,
-          mimetype: "audio/wav",
+          audio: oggBuffer,
+          mimetype: "audio/ogg; codecs=opus",
           ptt: false,
-          fileName: `tono_${frecuencia}hz.wav`,
         },
         { quoted: msg }
       );
@@ -58,6 +80,9 @@ export default {
       await reply({
         text: `⛧ ${e.message}`,
       });
+    } finally {
+      if (wavPath) await fs.unlink(wavPath).catch(() => {});
+      if (oggPath) await fs.unlink(oggPath).catch(() => {});
     }
   },
 };
