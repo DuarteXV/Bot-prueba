@@ -55,7 +55,7 @@ export default {
       await fs.writeFile(wavPath, buffer);
 
       await execAsync(
-        `ffmpeg -y -i "${wavPath}" -c:a libopus -b:a 64k -vbr on -application voip "${oggPath}"`
+        `ffmpeg -y -i "${wavPath}" -c:a libopus -b:a 96k -vbr on -application audio "${oggPath}"`
       );
 
       const oggBuffer = await fs.readFile(oggPath);
