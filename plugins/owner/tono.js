@@ -101,5 +101,3 @@ function generarTonoWav(frecuencia, duracionSegundos = 5, sampleRate = SAMPLE_RA
 
   return buffer;
 }
-
-module.exports = { generarTonoWav };
