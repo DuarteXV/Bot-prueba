@@ -33,8 +33,24 @@ export default {
       const info = id ? await yts({ videoId: id }).catch(() => null) : (await yts(text)).videos[0]
       if (!info && !id) return reply({ text: '❌ Sin resultados' })
 
+      const thumbnail = info?.thumbnail ?? info?.image
+
+      const rich = new AIRich(sock)
+        .setTitle('© Downloaded With Yuta')
+        .addVideo(
+          { url: '', thumbnail },
+          { autoFill: false, status: 'GENERATING', estimatedTime: 60000, id: 'media' }
+        )
+
+      await rich.send(from, { quoted: msg })
+
       const data = await fetchData(info?.url ?? text)
-      if (!data) return reply({ text: '❌ Error API' })
+
+      if (!data) {
+        rich.addText('❌ Error API', { replace: 'media' })
+        await rich.sendEdit()
+        return react('❌')
+      }
 
       const mp4 = data.datos.url
       const title = data.titulo ?? info?.title ?? 'video'
@@ -42,28 +58,23 @@ export default {
       const head = await axios.head(mp4).catch(() => null)
       const size = Number(head?.headers['content-length']) || 0
       const sizeMB = size / 1024 / 1024
-
-      await sock.sendMessage(from, { text: `🎬 ${title}\n📦 ${sizeMB.toFixed(2)} MB` }, { quoted: msg })
+      const caption = `🎬 ${title}\n📦 ${sizeMB.toFixed(2)} MB`
 
       if (sizeMB >= LIMIT_MB) {
+        rich.addText(caption, { replace: 'media' })
+        await rich.sendEdit()
         await sock.sendMessage(
           from,
           { document: { url: mp4 }, mimetype: 'video/mp4', fileName: `${title}.mp4` },
           { quoted: msg }
         )
       } else {
-        await new AIRich(sock)
-          .setTitle('© Downloaded With Yotsuba')
-          .addVideo(
-            {
-              url: mp4,
-              file_length: size,
-              duration: info?.seconds,
-              thumbnail: info?.thumbnail ?? info?.image
-            },
-            { autoFill: !info }
-          )
-          .send(from, { quoted: msg })
+        rich.addVideo(
+          { url: mp4, file_length: size, duration: info?.seconds, thumbnail },
+          { replace: 'media', autoFill: !info }
+        )
+        rich.addText(caption)
+        await rich.sendEdit()
       }
 
       await react('✅')
