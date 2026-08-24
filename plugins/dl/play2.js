@@ -58,7 +58,7 @@ export default {
       const head = await axios.head(mp4).catch(() => null)
       const size = Number(head?.headers['content-length']) || 0
       const sizeMB = size / 1024 / 1024
-      const caption = `🎬 ${title}\n📦 ${sizeMB.toFixed(2)} MB`
+      const caption = `> ${title} ( ${sizeMB.toFixed(2)} MB )`
 
       if (sizeMB >= LIMIT_MB) {
         rich.addText(caption, { replace: 'media' })
