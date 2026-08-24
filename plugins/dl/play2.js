@@ -36,7 +36,7 @@ export default {
       const thumbnail = info?.thumbnail ?? info?.image
 
       const rich = new AIRich(sock)
-        .setTitle('© Downloaded With Yuta')
+       // .setTitle('© Downloaded With Yuta')
         .addVideo(
           { url: '', thumbnail },
           { autoFill: false, status: 'GENERATING', estimatedTime: 60000, id: 'media' }
