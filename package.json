@@ -25,6 +25,5 @@
     "sharp": "^0.33.5",
     "tough-cookie": "^5.1.2",
     "yt-search": "^2.13.1",
-    "@ado21/ytm-dl": "^0.1.7"
   }
 }
