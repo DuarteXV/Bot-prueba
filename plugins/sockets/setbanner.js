@@ -39,7 +39,7 @@ async function subirDix(buffer, filename, mimetype) {
 export default {
   name: ['setbanner', 'cambiarbanner'],
   description: 'Cambia el banner de un subbot o del bot principal',
-  category: 'owner',
+  category: 'sockets',
   ownerOnly: false,
 
   async run({ sock, from, msg, reply, sender, resolveLid }) {
