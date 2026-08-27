@@ -4,7 +4,7 @@ import { checkCooldown, setCooldown, addBolsillo, formatTime } from "../../core/
 export default {
   name: ["daily", "diario"],
   description: "Reclama tu recompensa diaria",
-  category: "economia",
+  category: "economy",
 
   async run({ sender, reply }) {
     const status = checkCooldown(sender, "daily");
