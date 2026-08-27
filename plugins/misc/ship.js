@@ -30,7 +30,7 @@ function drawCircleAvatar(ctx, img, x, y, size) {
 export default {
   name: ["ship"],
   description: "Genera una tarjeta de compatibilidad entre dos usuarios",
-  category: "fun",
+  category: "misc",
   groupOnly: true,
 
   async run({ sock, from, sender, msg, reply }) {
