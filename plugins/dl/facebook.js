@@ -2,6 +2,7 @@ import axios from 'axios'
 import fs from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
+import crypto from 'crypto'
 
 function validateFacebookUrl(url) {
   try {
@@ -70,9 +71,7 @@ async function downloadFacebookVideo(url) {
     return {
       videoUrl: mejorFormato.url,
       title: mejorFormato.filename || 'Video de Facebook',
-      uploader: data.creator || 'AlyaCore API',
-      duration: duration,
-      viewCount: null
+      duration
     }
   } catch (error) {
     throw new Error(`Facebook API error: ${error.message}`)
@@ -87,13 +86,19 @@ async function descargarBuffer(url) {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
   })
-  return Buffer.from(data)
+
+  const buffer = Buffer.from(data)
+  if (!buffer.length) {
+    throw new Error('El servidor devolvió un archivo de video vacío')
+  }
+  return buffer
 }
 
 function reencodearVideo(bufferEntrada) {
   const tmpDir = '/tmp'
-  const inputPath = path.join(tmpDir, `fb_in_${Date.now()}.mp4`)
-  const outputPath = path.join(tmpDir, `fb_out_${Date.now()}.mp4`)
+  const id = crypto.randomBytes(6).toString('hex')
+  const inputPath = path.join(tmpDir, `fb_in_${id}.mp4`)
+  const outputPath = path.join(tmpDir, `fb_out_${id}.mp4`)
 
   fs.writeFileSync(inputPath, bufferEntrada)
 
@@ -103,8 +108,7 @@ function reencodearVideo(bufferEntrada) {
       { stdio: 'ignore', timeout: 120000 }
     )
 
-    const bufferSalida = fs.readFileSync(outputPath)
-    return bufferSalida
+    return fs.readFileSync(outputPath)
   } finally {
     try { fs.unlinkSync(inputPath) } catch {}
     try { fs.unlinkSync(outputPath) } catch {}
@@ -137,12 +141,10 @@ export default {
     try {
       const result = await downloadFacebookVideo(facebookUrl)
       const bufferOriginal = await descargarBuffer(result.videoUrl)
-
       const bufferFinal = reencodearVideo(bufferOriginal)
 
       const caption = `✅ *Video de Facebook descargado*\n\n` +
         `📹 *Título:* ${result.title}\n` +
-        `👤 *API Crédito:* ${result.uploader}\n` +
         `⏱️ *Duración:* ${result.duration ? formatDuration(result.duration) : 'N/A'}`
 
       await sock.sendMessage(from, {
