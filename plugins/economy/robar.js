@@ -5,7 +5,7 @@ import { jidNormalizedUser } from "@whiskeysockets/baileys";
 export default {
   name: ["rob", "robar"],
   description: "Intenta robarle plata a otro usuario",
-  category: "economia",
+  category: "economy",
   groupOnly: true,
 
   async run({ sender, msg, reply, resolveLid }) {
