@@ -3,7 +3,7 @@ import { checkCooldown, setCooldown, addBolsillo, formatTime } from "../../core/
 export default {
   name: ["monthly", "mensual"],
   description: "Reclama tu recompensa mensual",
-  category: "economia",
+  category: "economy",
 
   async run({ sender, reply }) {
     const status = checkCooldown(sender, "monthly");
