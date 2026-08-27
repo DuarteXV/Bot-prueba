@@ -14,7 +14,7 @@ const FRECUENCIA_MAX = 20000;
 export default {
   name: ["tono", "frecuencia", "hz"],
   description: "Genera un tono puro en una frecuencia (Hz) específica",
-  category: "tools",
+  category: "owner",
   ownerOnly: true,
 
   async run({ sock, from, msg, text, reply, react }) {
