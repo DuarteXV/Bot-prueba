@@ -33,13 +33,6 @@ function validateFacebookUrl(url) {
   return null;
 }
 
-function formatDuration(seconds) {
-  if (!seconds || Number.isNaN(seconds)) return "0:00";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 async function downloadFacebookVideo(url) {
   const res = await axios.get("https://api.alyacore.xyz/dl/facebook", {
     params: { url, key: "Duarte-zz12" },
@@ -63,15 +56,8 @@ async function downloadFacebookVideo(url) {
     throw new Error("No se encontró un enlace de descarga de video válido");
   }
 
-  let duration = null;
-  const match = mejorFormato.url.match(/duration_s%22%3A(\d+)/);
-  if (match) duration = parseInt(match[1], 10);
-
   return {
-    videoUrl: decodeHtmlEntities(mejorFormato.url),
-    quality: mejorFormato.quality,
-    title: mejorFormato.filename || "Video de Facebook",
-    duration
+    videoUrl: decodeHtmlEntities(mejorFormato.url)
   };
 }
 
@@ -85,12 +71,7 @@ export default {
     try {
       if (!text) {
         return await reply({
-          text:
-            `✨ ═══ 🫧 *FACEBOOK* 🫧 ═══ ✨\n\n` +
-            `❌ Debes ingresar un enlace de Facebook.\n\n` +
-            `💡 *Uso:*\n` +
-            `  ✦ ${usedPrefix}facebook https://www.facebook.com/watch?v=1234567890\n\n` +
-            `⚔️ _Yuta Okotsu MD | DuarteXV_`
+          text: `Debes ingresar un enlace de Facebook.\n\nUso: ${usedPrefix}facebook https://www.facebook.com/watch?v=1234567890`
         });
       }
 
@@ -98,34 +79,24 @@ export default {
       if (!facebookUrl) {
         return await reply({
           text:
-            `✨ ═══ 🫧 *FACEBOOK* 🫧 ═══ ✨\n\n` +
-            `❌ URL de Facebook inválida.\n\n` +
-            `✅ *URLs válidas:*\n` +
+            `URL de Facebook inválida.\n\n` +
+            `URLs válidas:\n` +
             `• facebook.com/.../videos/...\n` +
             `• facebook.com/watch?v=...\n` +
             `• facebook.com/reel/...\n` +
             `• facebook.com/share/v/...\n` +
-            `• fb.watch/...\n\n` +
-            `⚔️ _Yuta Okotsu MD | DuarteXV_`
+            `• fb.watch/...`
         });
       }
 
       await react("⏳");
-      await reply({ text: `> ✎...Descargando video de Facebook.` });
 
       const result = await downloadFacebookVideo(facebookUrl);
-
-      const caption =
-        `✨ ═══ 🫧 *FACEBOOK* 🫧 ═══ ✨\n\n` +
-        `📹 *Título:* ${result.title}\n` +
-        `🎞️ *Calidad:* ${result.quality}\n` +
-        `⏱️ *Duración:* ${formatDuration(result.duration)}\n\n` +
-        `⚔️ _Yuta Okotsu MD | DuarteXV_`;
 
       // Stream directo por URL, sin bajar el buffer ni reencodear.
       await sock.sendMessage(
         from,
-        { video: { url: result.videoUrl }, mimetype: "video/mp4", caption },
+        { video: { url: result.videoUrl }, mimetype: "video/mp4", caption: "Aquí tienes :D" },
         { quoted: msg }
       );
 
@@ -133,12 +104,7 @@ export default {
 
     } catch (error) {
       await react("❌");
-      await reply({
-        text:
-          `✨ ═══ 🫧 *FACEBOOK* 🫧 ═══ ✨\n\n` +
-          `❌ *Error:* ${error.message}\n\n` +
-          `⚔️ _Yuta Okotsu MD | DuarteXV_`
-      });
+      await reply({ text: `Error: ${error.message}` });
       console.error("Error en facebook:", error);
     }
   }
