@@ -7,7 +7,7 @@ export default {
   ownerOnly: false,
 
   async run({ sock, from, msg }) {
-    const ownerNum = '9779829141452'
+    const ownerNum = '573135180876'
 
     if (!ownerNum) return
 
