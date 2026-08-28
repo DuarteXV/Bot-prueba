@@ -1,5 +1,14 @@
 import axios from "axios";
 
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 function validateFacebookUrl(url) {
   let cleaned = url.trim().replace(/[^\x00-\x7F]/g, "");
 
@@ -59,7 +68,7 @@ async function downloadFacebookVideo(url) {
   if (match) duration = parseInt(match[1], 10);
 
   return {
-    videoUrl: mejorFormato.url,
+    videoUrl: decodeHtmlEntities(mejorFormato.url),
     quality: mejorFormato.quality,
     title: mejorFormato.filename || "Video de Facebook",
     duration
