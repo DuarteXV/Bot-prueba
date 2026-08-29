@@ -1,3 +1,5 @@
+import { ITEMS } from '../../core/gamedata.js'
+
 export default {
   name: ['tienda', 'shop'],
   description: 'Muestra los items disponibles para comprar',
@@ -6,26 +8,30 @@ export default {
 
   async run({ reply, react }) {
     await react('🛒')
-    await reply({
-      text: `🛒 *Tienda de Fragmentos*\n` +
-        `╰━━━━━━(☆)━━━━━━─╮\n\n` +
-        `*🪏 Pala*\n` +
-        `   💰 Precio: 500 Fragmentos\n` +
-        `   ⚡ Bonus: +50 Fragmentos por trabajo\n` +
-        `   🆔 ID: \`pala\`\n\n` +
-        `*⛏️ Pico*\n` +
-        `   💰 Precio: 1.200 Fragmentos\n` +
-        `   ⚡ Bonus: +120 Fragmentos por trabajo\n` +
-        `   🆔 ID: \`pico\`\n\n` +
-        `*🗡️ Katana maldita*\n` +
-        `   💰 Precio: 3.000 Fragmentos\n` +
-        `   ⚡ Bonus: +300 Fragmentos por trabajo\n` +
-        `   🆔 ID: \`katana_maldita\`\n\n` +
-        `*💎 Cristal de dominio*\n` +
-        `   💰 Precio: 8.000 Fragmentos\n` +
-        `   ⚡ Bonus: +600 Fragmentos por trabajo\n` +
-        `   🆔 ID: \`cristal_dominio\`\n\n` +
-        `> Usá *.comprar <ID>* para comprar un item`
-    })
+
+    const genericos = Object.entries(ITEMS).filter(([, i]) => !i.restriccion)
+    const exclusivos = Object.entries(ITEMS).filter(([, i]) => i.restriccion)
+
+    let texto = `🛒 *Tienda de Fragmentos*\n╰━━━━━━(☆)━━━━━━─╮\n\n`
+    texto += `*── Objetos generales (cualquier personaje) ──*\n\n`
+
+    for (const [id, item] of genericos) {
+      texto += `*${item.nombre}*\n`
+      texto += `   💰 ${item.precio.toLocaleString()} Fragmentos | ⚡ Poder: ${item.poder}\n`
+      texto += `   🆔 \`${id}\`\n\n`
+    }
+
+    texto += `*── Objetos exclusivos por personaje ──*\n\n`
+
+    for (const [id, item] of exclusivos) {
+      texto += `*${item.nombre}*\n`
+      texto += `   💰 ${item.precio.toLocaleString()} Fragmentos | ⚡ Poder: ${item.poder}\n`
+      texto += `   🔒 Solo: *${item.restriccion}*\n`
+      texto += `   🆔 \`${id}\`\n\n`
+    }
+
+    texto += `> Usá *.comprar <ID>* para comprar\n> Usá *.equipar <ID> <personaje>* para equiparlo`
+
+    await reply({ text: texto })
   }
 }
