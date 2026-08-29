@@ -80,15 +80,10 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
       msg.message?.videoMessage?.caption ||
       msg.message?.buttonsResponseMessage?.selectedButtonId ||
       msg.message?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+      msg.message?.templateButtonReplyMessage?.selectedId ||
       "";
 
     const msgType = msg.message ? Object.keys(msg.message)[0] ?? "unknown" : "unknown";
-
-    if (!["conversation", "extendedTextMessage", "reactionMessage", "unknown"].includes(msgType)) {
-      sock.sendMessage(from, {
-        text: `🐛 DEBUG tipo: ${msgType}\n\`\`\`${JSON.stringify(msg.message, null, 2).slice(0, 1500)}\`\`\``
-      }, { quoted: msg }).catch(() => {});
-    }
 
     const msgTypeLabel =
       msgType === "conversation" ? "Texto" :
