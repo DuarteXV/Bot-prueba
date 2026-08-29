@@ -1,11 +1,5 @@
 import { db } from '../../database/db.js'
-
-const ITEMS = {
-  pala: { nombre: '🪏 Pala', precio: 500 },
-  pico: { nombre: '⛏️ Pico', precio: 1200 },
-  katana_maldita: { nombre: '🗡️ Katana maldita', precio: 3000 },
-  cristal_dominio: { nombre: '💎 Cristal de dominio', precio: 8000 },
-}
+import { ITEMS } from '../../core/gamedata.js'
 
 export default {
   name: ['comprar', 'buy'],
@@ -35,9 +29,9 @@ export default {
       const faltante = item.precio - eco.bolsillo
       return await reply({
         text: `❌ No tenés suficientes Fragmentos.\n\n` +
-          `*Precio:* ${item.precio} Fragmentos\n` +
-          `*Bolsillo:* ${eco.bolsillo} Fragmentos\n` +
-          `*Te faltan:* ${faltante} Fragmentos`
+          `*Precio:* ${item.precio.toLocaleString()} Fragmentos\n` +
+          `*Bolsillo:* ${eco.bolsillo.toLocaleString()} Fragmentos\n` +
+          `*Te faltan:* ${faltante.toLocaleString()} Fragmentos`
       })
     }
 
@@ -51,9 +45,9 @@ export default {
     await reply({
       text: `✅ *Compra exitosa*\n\n` +
         `*Item:* ${item.nombre}\n` +
-        `*Precio pagado:* ${item.precio} Fragmentos\n` +
-        `*Bolsillo restante:* ${eco.bolsillo - item.precio} Fragmentos\n\n` +
-        `> El bonus ya aplica en tu próximo *.work*`
+        `*Precio pagado:* ${item.precio.toLocaleString()} Fragmentos\n` +
+        `*Bolsillo restante:* ${(eco.bolsillo - item.precio).toLocaleString()} Fragmentos\n\n` +
+        `> Usá *.equipar ${itemId} <personaje>* para dárselo a un personaje`
     })
   }
 }
