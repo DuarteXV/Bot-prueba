@@ -21,16 +21,20 @@ export default {
     }
 
     const total = eco.bolsillo + eco.banco;
-    const nombre = db.getPushName(sender) || sender.split("@")[0];
+    const mention = `@${sender.split("@")[0]}`;
 
     const caption =
-      `『👤』*Perfil de ${nombre}*\n\n` +
-      `💰 *Monedas:* ${total} (Bolsillo: ${eco.bolsillo} | Banco: ${eco.banco})\n` +
-      `⭐ *Nivel:* ${level}\n` +
-      `✨ *XP:* ${xp} (faltan ${missing} para nivel ${level + 1})`;
+      `𓂃ෆ˚ 🍮 ⍴ᥱr𝖿іᥣ ძᥱ ${mention} ౨ৎ\n\n` +
+      `𓂃ෆ˚ 🍮 m᥆ᥒᥱძᥲs ${total} [ᑲ᥆ᥣsіᥣᥣ᥆: ${eco.bolsillo} | ᑲᥲᥒᥴ᥆: ${eco.banco}]\n` +
+      `⏤͟͟͞͞  ⚡ ᥒі᥎ᥱᥣ: ${level}\n` +
+      `𓂃ෆ˚ *᥊⍴:* ${xp} [𝖿ᥲᥣ𝗍ᥲᥒ ${missing} ⍴ᥲrᥲ ᥒі᥎ᥱᥣ${level + 1}]`;
 
     try {
-      await sock.sendMessage(from, { image: { url: photoUrl }, caption }, { quoted: msg });
+      await sock.sendMessage(
+        from,
+        { image: { url: photoUrl }, caption, mentions: [sender] },
+        { quoted: msg }
+      );
     } catch (error) {
       await reply({ text: `Error al mostrar el perfil: ${error.message}` });
       console.error("Error en perfil:", error);
