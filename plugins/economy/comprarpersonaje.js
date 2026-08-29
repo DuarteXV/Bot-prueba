@@ -8,7 +8,7 @@ function getPersonajes(jid) {
 }
 
 export default {
-  name: ["comprarpersonaje", "buychar"],
+  name: ["buychar"],
   description: "Compra un personaje de Jujutsu Kaisen",
   category: "economy",
 
