@@ -8,14 +8,13 @@ function getPersonajes(jid) {
 }
 
 export default {
-  name: ["buychar"],
+  name: ["comprarpersonaje", "buychar"],
   description: "Compra un personaje de Jujutsu Kaisen",
   category: "economy",
 
   async run({ sock, from, msg, sender, args, reply, react, usedPrefix }) {
     const personajeId = args[0]?.toLowerCase();
 
-    // ── Confirmar compra si vino con argumento (desde el botón del carrusel) ──
     if (personajeId) {
       const personaje = PERSONAJES[personajeId];
       if (!personaje) {
@@ -53,7 +52,6 @@ export default {
       });
     }
 
-    // ── Sin argumento: mostrar el carrusel de personajes ──
     try {
       const cards = [];
 
@@ -65,7 +63,7 @@ export default {
             `Precio: ${personaje.precio.toLocaleString()} Fragmentos`
           )
           .setImage(personaje.imagen)
-          .addReply(`Comprar ${personaje.nombre}`, `${usedPrefix}comprarpersonaje ${id}`);
+          .addReply(`Comprar ${personaje.nombre}`, `${usedPrefix}buychar ${id}`);
 
         cards.push(await cardButton.toCard());
       }
