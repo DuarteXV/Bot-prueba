@@ -1,240 +1,255 @@
-import crypto from 'crypto'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { downloadMediaMessage } from '@whiskeysockets/baileys'
+import axios from 'axios'
+import sharp from 'sharp'
+import { crc32 } from 'zlib'
+import {
+  MEDIA_PATH_MAP,
+  MEDIA_HKDF_KEY_MAPPING,
+  encryptedStream,
+  generateWAMessageFromContent,
+  generateMessageIDV2,
+  unixTimestampSeconds,
+  sha256,
+  proto
+} from '@whiskeysockets/baileys'
 import { db } from '../../database/db.js'
-import config from '../../config.js'
 
-const execAsync = promisify(exec)
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const tmp = path.join(__dirname, '../../tmp')
+MEDIA_PATH_MAP['sticker-pack'] = '/mms/document'
+MEDIA_HKDF_KEY_MAPPING['sticker-pack'] = 'Sticker Pack'
 
-if (!fs.existsSync(tmp)) fs.mkdirSync(tmp, { recursive: true })
+const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
-const clean = (value) => typeof value === 'string' ? value.trim() : ''
+const toBuffer = async (url) =>
+  Buffer.from((await axios.get(url, { responseType: 'arraybuffer' })).data)
 
-function getBotLabel(botJid) {
-  const bot = db.getBot(botJid)
-  if (
-    bot?.label &&
-    bot.label !== 'Subbot' &&
-    bot.label !== 'MAIN' &&
-    !bot.label.startsWith('SUB_')
-  ) {
-    return bot.label
+const isWebp = (b) =>
+  b.length >= 12 &&
+  b.toString('ascii', 0, 4) === 'RIFF' &&
+  b.toString('ascii', 8, 12) === 'WEBP'
+
+const isAnimatedWebp = (b) => {
+  if (!isWebp(b)) return false
+  let o = 12
+  while (o < b.length - 8) {
+    const tag = b.toString('ascii', o, o + 4)
+    const sz = b.readUInt32LE(o + 4)
+    if (tag === 'VP8X' && b[o + 8] & 0x02) return true
+    if (tag === 'ANIM' || tag === 'ANMF') return true
+    o += 8 + sz + (sz % 2)
   }
-  return null
+  return false
 }
 
-function getStickerMeta(senderNum, pushName, botJid) {
-  const user = db.getUser(senderNum) || {}
+const toWebp = async (buffer, animated = false) =>
+  sharp(buffer, animated ? { animated: true } : {})
+    .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .webp({ quality: 80, ...(animated ? { loop: 0 } : {}) })
+    .toBuffer()
 
-  const userPack = clean(user.text1)
-  const userAuthor = clean(user.text2)
+const makeZip = (files) => {
+  const locals = []
+  const centrals = []
+  let offset = 0
+  for (const [name, data] of Object.entries(files)) {
+    const n = Buffer.from(name, 'utf8')
+    const crc = crc32(data)
+    const local = Buffer.alloc(30 + n.length)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt32LE(crc, 14)
+    local.writeUInt32LE(data.length, 18)
+    local.writeUInt32LE(data.length, 22)
+    local.writeUInt16LE(n.length, 26)
+    n.copy(local, 30)
+    locals.push(local, data)
+    const central = Buffer.alloc(46 + n.length)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE(20, 4)
+    central.writeUInt16LE(20, 6)
+    central.writeUInt32LE(crc, 16)
+    central.writeUInt32LE(data.length, 20)
+    central.writeUInt32LE(data.length, 24)
+    central.writeUInt16LE(n.length, 28)
+    central.writeUInt32LE(offset, 42)
+    n.copy(central, 46)
+    centrals.push(central)
+    offset += local.length + data.length
+  }
+  const cd = Buffer.concat(centrals)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(centrals.length, 8)
+  end.writeUInt16LE(centrals.length, 10)
+  end.writeUInt32LE(cd.length, 12)
+  end.writeUInt32LE(offset, 16)
+  return Buffer.concat([...locals, cd, end])
+}
 
-  const hasUserMeta = Boolean(userPack || userAuthor)
-
-  const nombre = pushName || senderNum
-  const botLabel = getBotLabel(botJid)
-
-  return {
-    hasUserMeta,
-    packname: userPack || botLabel || config.botname,
-    author: userAuthor || `@${nombre}`
+const withRetry = async (fn, attempt = 1) => {
+  try {
+    return await fn()
+  } catch (e) {
+    if (e.response?.status === 429 && attempt <= 3) {
+      await delay((e.response.headers['retry-after'] || 5) * 1000)
+      return withRetry(fn, attempt + 1)
+    }
+    throw e
   }
 }
 
-function parseTempMeta(args, packname, author) {
-  if (!args.length) return { packname, author }
+const searchStickerly = (query) =>
+  withRetry(async () => {
+    const { data } = await axios.get('https://api.alyacore.xyz/stickerly/search', {
+      params: { query, key: 'Duarte-zz12' }
+    })
+    return data
+  })
 
-  const texto = args.join(' ').trim()
-  if (!texto) return { packname, author }
+const getPackDetail = (url) =>
+  withRetry(async () => {
+    const { data } = await axios.get('https://api.alyacore.xyz/stickerly/detail', {
+      params: { url, key: 'Duarte-zz12' }
+    })
+    return data
+  })
 
-  if (texto.includes('|')) {
-    const [p, a] = texto.split('|').map(s => s.trim())
+const sendStickerPack = async (sock, jid, { name, publisher, description, stickers, cover, quoted }) => {
+  if (!stickers.length) throw new Error('Pack vacío')
+  if (stickers.length > 60) throw new Error('Máximo 60 stickers por pack')
+
+  const packId = generateMessageIDV2()
+  const files = {}
+
+  const meta = stickers.map((s) => {
+    if (s.sticker.length > 1024 * 1024) throw new Error('Un sticker supera 1MB')
+    const fileName = sha256(s.sticker).toString('base64').replace(/\//g, '-') + '.webp'
+    files[fileName] = s.sticker
     return {
-      packname: p || packname,
-      author: a || author
+      fileName,
+      mimetype: 'image/webp',
+      isAnimated: !!s.isAnimated,
+      emojis: s.emojis?.length ? s.emojis : ['🎭'],
+      accessibilityLabel: ''
+    }
+  })
+
+  const trayIconFileName = `${packId}.webp`
+  files[trayIconFileName] = cover
+
+  const zipBuffer = makeZip(files)
+
+  const up = await encryptedStream(zipBuffer, 'sticker-pack', { logger: sock.logger })
+  const { directPath } = await sock.waUploadToServer(up.encFilePath, {
+    fileEncSha256B64: up.fileEncSha256.toString('base64'),
+    mediaType: 'sticker-pack'
+  })
+
+  const content = {
+    stickerPackMessage: {
+      name,
+      publisher,
+      packDescription: description,
+      stickerPackId: packId,
+      stickerPackOrigin: proto.Message.StickerPackMessage.StickerPackOrigin.THIRD_PARTY,
+      stickerPackSize: zipBuffer.length,
+      stickers: meta,
+      fileSha256: up.fileSha256,
+      fileEncSha256: up.fileEncSha256,
+      mediaKey: up.mediaKey,
+      directPath,
+      fileLength: up.fileLength,
+      mediaKeyTimestamp: unixTimestampSeconds(),
+      trayIconFileName
     }
   }
 
-  return {
-    packname: texto,
-    author: texto
-  }
-}
-
-async function addExif(webpBuffer, packname, author) {
-  const { default: webp } = await import('node-webpmux')
-  const img = new webp.Image()
-
-  const json = {
-    'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
-    'sticker-pack-name': packname,
-    'sticker-pack-publisher': author,
-    emojis: ['⚔️']
-  }
-
-  const exifAttr = Buffer.from([
-    0x49, 0x49, 0x2A, 0x00,
-    0x08, 0x00, 0x00, 0x00,
-    0x01, 0x00, 0x41, 0x57,
-    0x07, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x16, 0x00,
-    0x00, 0x00
-  ])
-
-  const jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8')
-  const exif = Buffer.concat([exifAttr, jsonBuffer])
-
-  exif.writeUIntLE(jsonBuffer.length, 14, 4)
-
-  await img.load(webpBuffer)
-  img.exif = exif
-
-  return await img.save(null)
-}
-
-async function convertirWebp(buffer, esVideo = false) {
-  const id = crypto.randomBytes(8).toString('hex')
-  const ext = esVideo ? 'mp4' : 'jpg'
-
-  const inputP = path.join(tmp, `stk_${id}.${ext}`)
-  const outP = path.join(tmp, `stk_${id}.webp`)
-
-  fs.writeFileSync(inputP, buffer)
-
-  try {
-    if (esVideo) {
-      const { stdout } = await execAsync(
-        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
-      )
-
-      const dur = parseFloat(stdout.trim())
-
-      if (dur > 15) {
-        throw new Error(`El video dura *${dur.toFixed(1)}s*, máximo *15 segundos*`)
-      }
-
-      await execAsync(
-        `ffmpeg -i "${inputP}" -t 15 -vf "fps=15,scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -c:v libwebp -lossless 0 -q:v 70 -loop 0 -an -vsync 0 "${outP}" -y`
-      )
-    } else {
-      await execAsync(
-        `ffmpeg -i "${inputP}" -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -c:v libwebp -lossless 0 -q:v 80 "${outP}" -y`
-      )
-    }
-
-    return fs.readFileSync(outP)
-  } finally {
-    try { fs.unlinkSync(inputP) } catch {}
-    try { fs.unlinkSync(outP) } catch {}
-  }
-}
-
-async function limpiarSticker(buffer) {
-  const id = crypto.randomBytes(8).toString('hex')
-
-  const inputP = path.join(tmp, `stk_${id}.webp`)
-  const outP = path.join(tmp, `stk_${id}_out.webp`)
-
-  fs.writeFileSync(inputP, buffer)
-
-  try {
-    try {
-      await execAsync(`ffmpeg -i "${inputP}" -vcodec copy "${outP}" -y`)
-    } catch {
-      try {
-        await execAsync(
-          `ffmpeg -i "${inputP}" -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000" -c:v libwebp -lossless 0 -q:v 70 -loop 0 -an -vsync 0 "${outP}" -y`
-        )
-      } catch {
-        fs.writeFileSync(outP, buffer)
-      }
-    }
-
-    return fs.readFileSync(outP)
-  } finally {
-    try { fs.unlinkSync(inputP) } catch {}
-    try { fs.unlinkSync(outP) } catch {}
-  }
+  const m = generateWAMessageFromContent(jid, content, { quoted, userJid: sock.user.id })
+  await sock.relayMessage(jid, m.message, { messageId: m.key.id })
+  return m
 }
 
 export default {
-  name: ['s', 'sticker', 'stik'],
-  description: 'Crea stickers desde imagen, video o sticker',
+  name: ['stickersearch', 'buscars', 'spack'],
+  description: 'Busca packs de stickers en Sticker.ly',
   category: 'stickers',
   ownerOnly: false,
 
-  async run({ sock, from, msg, senderNum, args, usedPrefix, react, reply }) {
+  async run({ sock, from, msg, text, usedPrefix, senderNum, reply, react }) {
     try {
-      await react('🕒')
-
-      const pushName = msg.pushName || senderNum
-      const botJid = sock.user?.id ? sock.user.id.split(':')[0].split('@')[0] + '@s.whatsapp.net' : ''
-      let { hasUserMeta, packname, author } = getStickerMeta(senderNum, pushName, botJid)
-
-      if (!hasUserMeta) {
-        const tempMeta = parseTempMeta(args, packname, author)
-        packname = tempMeta.packname
-        author = tempMeta.author
-      }
-
-      const msgType = Object.keys(msg.message || {})[0]
-
-      const contextInfo = msg.message?.extendedTextMessage?.contextInfo
-      const quoted = contextInfo?.quotedMessage
-      const quotedType = quoted ? Object.keys(quoted)[0] : null
-
-      const validTypes = ['imageMessage', 'videoMessage', 'stickerMessage']
-
-      const mediaMsg = validTypes.includes(msgType) ? msg : null
-
-      const quotedMsg = quoted && validTypes.includes(quotedType)
-        ? {
-            key: {
-              remoteJid: from,
-              id: contextInfo?.stanzaId,
-              participant: contextInfo?.participant
-            },
-            message: quoted
-          }
-        : null
-
-      const targetMsg = mediaMsg || quotedMsg
-      const targetType = mediaMsg ? msgType : quotedType
-
-      if (!targetMsg) {
+      if (!text) {
         return await reply({
-          text:
-            `❌ Envía o responde una imagen, video máx 15s o sticker.\n\n` +
-            `💡 *${usedPrefix}s* ➔ sticker normal\n` +
-            `💡 *${usedPrefix}s MiMarca* ➔ marca temporal\n` +
-            `💡 *${usedPrefix}setmeta MiMarca* ➔ marca fija`
+          text: `❌ Debes escribir el término a buscar.\n\n💡 *Uso:* ${usedPrefix || '.'}spack gatos`
         })
       }
 
-      const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, { sock })
+      await react('⏳')
 
-      const esVideo = targetType === 'videoMessage'
-      const esSticker = targetType === 'stickerMessage'
+      const search = await searchStickerly(text)
+      const resultados = search.resultados || search.result || []
+      const freePacks = resultados.filter((p) => !p.isPaid)
 
-      const webpBuffer = esSticker
-        ? await limpiarSticker(buffer)
-        : await convertirWebp(buffer, esVideo)
+      if (!freePacks.length) {
+        await react('❌')
+        return await reply({ text: `❌ No se encontraron packs para *${text}*.` })
+      }
 
-      const stickerFinal = await addExif(webpBuffer, packname, author)
+      const user = db.getUser(senderNum) || {}
+      const packName = user.text1 || global.packname || 'Yuta Pack'
+      const authorName = user.text2 || global.author || `@${senderNum}`
 
-      await sock.sendMessage(from, { sticker: stickerFinal }, { quoted: msg })
+      const detail = await getPackDetail(freePacks[0].url)
+
+      if (!detail.status || !detail.detalles?.stickers?.length) {
+        await react('❌')
+        return await reply({ text: '❌ No se pudo obtener el contenido del paquete.' })
+      }
+
+      const { detalles } = detail
+      const raw = detalles.stickers.slice(0, 30)
+
+      await reply({
+        text:
+          `𓂃ෆ˚ 📦 *⍴ᥲᥴk:* ${detalles.name}\n` +
+          `ෆ˚ *s𝗍іᥴkᥱrs:* ${raw.length}\n` +
+          `⚡ _⍴r᥆ᥴᥱsᥲᥒძ᥆ ⍴ᥲ𝗊ᥙᥱ𝗍ᥱ..._`
+      })
+
+      const stickers = (
+        await Promise.allSettled(
+          raw.map(async (s) => {
+            const buf = await toBuffer(s.imageUrl)
+            const animated = s.isAnimated || isAnimatedWebp(buf)
+            const webp = isWebp(buf) ? buf : await toWebp(buf, animated)
+            return { sticker: webp, isAnimated: animated, emojis: ['🎭'] }
+          })
+        )
+      )
+        .filter((r) => r.status === 'fulfilled')
+        .map((r) => r.value)
+
+      if (!stickers.length) {
+        await react('❌')
+        return await reply({ text: '❌ No se pudo procesar ningún sticker.' })
+      }
+
+      const cover = await sharp(await toBuffer(detalles.thumbnailUrl))
+        .resize(96, 96, { fit: 'cover' })
+        .webp({ quality: 80 })
+        .toBuffer()
+
+      await sendStickerPack(sock, from, {
+        name: packName,
+        publisher: authorName,
+        description: `${detalles.name} • ${global.botname || 'Yuta Bot'}`,
+        stickers,
+        cover,
+        quoted: msg
+      })
 
       await react('✅')
     } catch (error) {
+      console.error(error)
       await react('❌')
-      await reply({ text: `❌ ${error.message}` })
-      console.error('Error en sticker:', error)
+      await reply({ text: `❌ *Error:* ${error.message}` })
     }
   }
 }
