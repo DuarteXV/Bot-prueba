@@ -39,6 +39,7 @@ export default {
         metadata.participants
           .map((p) => p.id)
           .filter((id) => id.endsWith("@lid"))
+          .map((id) => limpiarNumero(id))
       );
 
       const participantNums = new Set(
@@ -49,6 +50,7 @@ export default {
 
       const numeroPrincipal = limpiarNumero(sock.user?.id);
       const nombrePrincipal = obtenerNombre(numeroPrincipal);
+      const principalData = db.getBot(`${numeroPrincipal}@s.whatsapp.net`);
 
       const todosLosBots = db.getAllBots().filter((b) => !b.isMain);
 
@@ -61,7 +63,6 @@ export default {
 
       const subbotsEnGrupo = todosLosBots.filter(estaEnGrupo);
 
-      const principalData = db.getBot(`${numeroPrincipal}@s.whatsapp.net`);
       const principalEnGrupo =
         participantNums.has(numeroPrincipal) ||
         (principalData?.lid && participantLids.has(principalData.lid));
@@ -74,7 +75,9 @@ export default {
       report += `〔🌱〕En este grupo: ${subbotsEnGrupo.length}\n\n`;
 
       if (principalEnGrupo) {
-        const jidPrincipal = `${numeroPrincipal}@s.whatsapp.net`;
+        const jidPrincipal = principalData?.lid
+          ? `${principalData.lid}@lid`
+          : `${numeroPrincipal}@s.whatsapp.net`;
         participantsMentions.push(jidPrincipal);
 
         report += `> *𖠌 ʙᴏᴛ::* @${numeroPrincipal} (${nombrePrincipal})\n`;
@@ -85,7 +88,7 @@ export default {
         for (const bot of subbotsEnGrupo) {
           const numero = limpiarNumero(bot.jid || bot.id);
           const nombreSub = obtenerNombre(numero);
-          const jidSub = `${numero}@s.whatsapp.net`;
+          const jidSub = bot.lid ? `${bot.lid}@lid` : `${numero}@s.whatsapp.net`;
 
           participantsMentions.push(jidSub);
 
