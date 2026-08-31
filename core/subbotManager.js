@@ -132,7 +132,7 @@ export function launchSubbot(id) {
   worker.on("message", (msg) => {
     if (msg.type === "status") {
       const subJid = msg.jid ? msg.jid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
-      updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false });
+      updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false, lid: msg.lid || null });
     }
     if (msg.type === "logged_out" || msg.type === "bad_session") {
       log.warn(`[MANAGER] Subbot ${id} cerró sesión — eliminando...`);
@@ -188,7 +188,7 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
 
       if (msg.type === "status") {
         const subJid = msg.jid ? msg.jid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
-        updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false });
+        updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false, lid: msg.lid || null });
 
         if (msg.status === "online") {
           clearTimeout(cleanupTimeout);
