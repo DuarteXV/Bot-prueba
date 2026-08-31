@@ -85,10 +85,9 @@ export function removeSubbot(id) {
   const botData = activeBots.get(id);
   activeBots.delete(id);
   if (botData && botData.jid) {
-    db.setBot(botData.jid, { status: "offline" });
-  } else {
-    db.setBot(id, { status: "offline" });
+    db.deleteBot(botData.jid);
   }
+  db.deleteBot(id);
   const sessionDir = `${SUBBOTS_DIR}/${id}`;
   if (fs.existsSync(sessionDir)) {
     fs.rmSync(sessionDir, { recursive: true, force: true });
@@ -108,10 +107,9 @@ function handleWorkerExit(id) {
     const botData = activeBots.get(id);
     activeBots.delete(id);
     if (botData && botData.jid) {
-      db.setBot(botData.jid, { status: "offline" });
-    } else {
-      db.setBot(id, { status: "offline" });
+      db.deleteBot(botData.jid);
     }
+    db.deleteBot(id);
     if (fs.existsSync(sessionDir2)) {
       fs.rmSync(sessionDir2, { recursive: true, force: true });
     }
