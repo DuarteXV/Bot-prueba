@@ -75,9 +75,15 @@ export default {
       report += `〔🌱〕En este grupo: ${subbotsEnGrupo.length}\n\n`;
 
       if (principalEnGrupo) {
-        const jidPrincipal = principalData?.lid
+        const matchPrincipal = metadata.participants.find(
+          (p) => p.id.endsWith("@lid") && limpiarNumero(p.id) === principalData?.lid
+        );
+        const jidPrincipal = matchPrincipal
+          ? matchPrincipal.id
+          : principalData?.lid
           ? `${principalData.lid}@lid`
           : `${numeroPrincipal}@s.whatsapp.net`;
+
         participantsMentions.push(jidPrincipal);
 
         report += `> *𖠌 ʙᴏᴛ::* @${numeroPrincipal} (${nombrePrincipal})\n`;
@@ -88,7 +94,15 @@ export default {
         for (const bot of subbotsEnGrupo) {
           const numero = limpiarNumero(bot.jid || bot.id);
           const nombreSub = obtenerNombre(numero);
-          const jidSub = bot.lid ? `${bot.lid}@lid` : `${numero}@s.whatsapp.net`;
+
+          const matchParticipant = metadata.participants.find(
+            (p) => p.id.endsWith("@lid") && limpiarNumero(p.id) === bot.lid
+          );
+          const jidSub = matchParticipant
+            ? matchParticipant.id
+            : bot.lid
+            ? `${bot.lid}@lid`
+            : `${numero}@s.whatsapp.net`;
 
           participantsMentions.push(jidSub);
 
