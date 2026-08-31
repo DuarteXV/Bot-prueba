@@ -70,6 +70,7 @@ export function updateBotStatus(id, data) {
   const current = activeBots.get(id) || {};
   activeBots.set(id, { ...current, ...data });
   if (data.jid) {
+    db.deleteBot(id);
     db.setBot(data.jid, data);
   } else {
     db.setBot(id, data);
