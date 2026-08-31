@@ -1,6 +1,5 @@
 import { db } from "../../database/db.js";
 import config from "../../config.js";
-import fs from "fs";
 
 export default {
   name: ["bots", "listbots"],
@@ -8,7 +7,7 @@ export default {
   category: "sockets",
   groupOnly: true,
 
-  async run({ sock, from, msg, react, reply, groupMeta, resolveLid }) {
+  async run({ sock, from, msg, react, reply, groupMeta }) {
     try {
       await react("🤖");
 
@@ -36,44 +35,45 @@ export default {
 
       const metadata = groupMeta || (await sock.groupMetadata(from));
 
-      const participantesGrupo = await Promise.all(
-        metadata.participants.map(async (p) => {
-          let jid = p.id;
-          if (jid.endsWith("@lid")) {
-            jid = await resolveLid(jid);
-          }
-          return limpiarNumero(jid);
-        })
+      const participantLids = new Set(
+        metadata.participants
+          .map((p) => p.id)
+          .filter((id) => id.endsWith("@lid"))
       );
 
-      // El principal es directamente quién está conectado AHORA, no lo que diga la DB
+      const participantNums = new Set(
+        metadata.participants
+          .map((p) => (!p.id.endsWith("@lid") ? limpiarNumero(p.id) : null))
+          .filter(Boolean)
+      );
+
       const numeroPrincipal = limpiarNumero(sock.user?.id);
       const nombrePrincipal = obtenerNombre(numeroPrincipal);
 
-      const subbotsDir = "./sessions/subbots";
-      let todosLosSubbots = [];
-      let subbotsEnGrupo = [];
+      const todosLosBots = db.getAllBots().filter((b) => !b.isMain);
 
-      if (fs.existsSync(subbotsDir)) {
-        todosLosSubbots = fs
-          .readdirSync(subbotsDir, { withFileTypes: true })
-          .filter((dir) => dir.isDirectory())
-          .map((dir) => dir.name)
-          .filter((name) => name.startsWith("sub_"))
-          .map((name) => name.replace("sub_", ""))
-          .filter((numero) => numero !== numeroPrincipal);
+      const estaEnGrupo = (bot) => {
+        const num = limpiarNumero(bot.jid || bot.id);
+        if (num && participantNums.has(num)) return true;
+        if (bot.lid && participantLids.has(bot.lid)) return true;
+        return false;
+      };
 
-        subbotsEnGrupo = todosLosSubbots.filter((numero) => participantesGrupo.includes(numero));
-      }
+      const subbotsEnGrupo = todosLosBots.filter(estaEnGrupo);
+
+      const principalData = db.getBot(`${numeroPrincipal}@s.whatsapp.net`);
+      const principalEnGrupo =
+        participantNums.has(numeroPrincipal) ||
+        (principalData?.lid && participantLids.has(principalData.lid));
 
       const participantsMentions = [];
 
       let report = `•.°· ◇ \`ᒪIՏTᗩ ᗪᗴ ᗷOTՏ ᗩᑕTIᐯOՏ\` ◇ ·°.•\n`;
       report += `〔💎〕Principal: ${nombrePrincipal}\n`;
-      report += `〔🌀〕Sub-bots: ${todosLosSubbots.length}\n`;
+      report += `〔🌀〕Sub-bots totales: ${todosLosBots.length}\n`;
       report += `〔🌱〕En este grupo: ${subbotsEnGrupo.length}\n\n`;
 
-      if (participantesGrupo.includes(numeroPrincipal)) {
+      if (principalEnGrupo) {
         const jidPrincipal = `${numeroPrincipal}@s.whatsapp.net`;
         participantsMentions.push(jidPrincipal);
 
@@ -82,7 +82,8 @@ export default {
       }
 
       if (subbotsEnGrupo.length > 0) {
-        for (const numero of subbotsEnGrupo) {
+        for (const bot of subbotsEnGrupo) {
+          const numero = limpiarNumero(bot.jid || bot.id);
           const nombreSub = obtenerNombre(numero);
           const jidSub = `${numero}@s.whatsapp.net`;
 
@@ -91,7 +92,7 @@ export default {
           report += `> *𖠌 ʙᴏᴛ::* @${numero} (${nombreSub})\n`;
           report += `> *⚝ ᴛɪᴘᴏ::* Sub-bot 🌀\n\n`;
         }
-      } else if (!participantesGrupo.includes(numeroPrincipal)) {
+      } else if (!principalEnGrupo) {
         report += `⚠️ No hay ningún bot de este sistema dentro de este grupo.\n\n`;
       }
 
