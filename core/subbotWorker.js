@@ -175,7 +175,11 @@ async function startWorker(_attempt = 0) {
 
       const rawJid = sock.user?.id || "";
       const jidLimpio = rawJid ? rawJid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : "";
-      parentPort.postMessage({ type: "status", status: "online", jid: jidLimpio });
+
+      const rawLid = sock.user?.lid || "";
+      const lidLimpio = rawLid ? rawLid.split(":")[0] : "";
+
+      parentPort.postMessage({ type: "status", status: "online", jid: jidLimpio, lid: lidLimpio });
       await flushPending();
     }
 
