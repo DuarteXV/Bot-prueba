@@ -38,7 +38,8 @@ const stmts = {
   getBot: db_instance.prepare("SELECT data FROM bots WHERE jid = ?"),
   insertBot: db_instance.prepare("INSERT INTO bots (jid, data) VALUES (?, ?)"),
   updateBot: db_instance.prepare("UPDATE bots SET data = ? WHERE jid = ?"),
-  getAllBots: db_instance.prepare("SELECT jid, data FROM bots")
+  getAllBots: db_instance.prepare("SELECT jid, data FROM bots"),
+  deleteBot: db_instance.prepare("DELETE FROM bots WHERE jid = ?")
 };
 
 function getUser(jid) {
@@ -114,6 +115,10 @@ export const db = {
       const updatedData = { ...currentData, ...dataObject };
       stmts.updateBot.run(JSON.stringify(updatedData), jid);
     }
+  },
+
+  deleteBot(jid) {
+    stmts.deleteBot.run(jid);
   },
 
   getAllBots() {
