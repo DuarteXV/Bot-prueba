@@ -33,7 +33,10 @@ export function registerMainBot(sock, label = "MAIN") {
   const jid = rawJid ? rawJid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : "";
   const status = jid ? "online" : "connecting";
 
-  activeBots.set("main", { label, jid, status, isMain: true });
+  const rawLid = sock.user?.lid || "";
+  const lid = rawLid ? rawLid.split(":")[0] : "";
+
+  activeBots.set("main", { label, jid, status, isMain: true, lid });
 
   if (jid) {
     const oldMains = db.getAllBots().filter(b => b.isMain && b.jid !== jid);
@@ -41,7 +44,7 @@ export function registerMainBot(sock, label = "MAIN") {
       db.setBot(old.jid, { isMain: false, status: "offline" }, true);
     }
 
-    db.setBot(jid, { label, jid, status, isMain: true });
+    db.setBot(jid, { label, jid, status, isMain: true, lid });
     global.mainBotNum = jid.split("@")[0];
   }
 
@@ -51,14 +54,17 @@ export function registerMainBot(sock, label = "MAIN") {
         mainSock = sock;
         const currentRawJid = sock.user?.id || "";
         const currentJid = currentRawJid ? currentRawJid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : "";
+        const currentRawLid = sock.user?.lid || "";
+        const currentLid = currentRawLid ? currentRawLid.split(":")[0] : "";
+
         if (currentJid) {
           const oldMains = db.getAllBots().filter(b => b.isMain && b.jid !== currentJid);
           for (const old of oldMains) {
             db.setBot(old.jid, { isMain: false, status: "offline" }, true);
           }
 
-          activeBots.set("main", { label, jid: currentJid, status: "online", isMain: true });
-          db.setBot(currentJid, { label, jid: currentJid, status: "online", isMain: true });
+          activeBots.set("main", { label, jid: currentJid, status: "online", isMain: true, lid: currentLid });
+          db.setBot(currentJid, { label, jid: currentJid, status: "online", isMain: true, lid: currentLid });
           global.mainBotNum = currentJid.split("@")[0];
         }
       }
@@ -133,7 +139,7 @@ export function launchSubbot(id) {
   worker.on("message", (msg) => {
     if (msg.type === "status") {
       const subJid = msg.jid ? msg.jid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
-      updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false, lid: msg.lid || null });
+      updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false, lid: msg.lid || null, pushName: msg.pushName || null });
     }
     if (msg.type === "logged_out" || msg.type === "bad_session") {
       log.warn(`[MANAGER] Subbot ${id} cerró sesión — eliminando...`);
@@ -189,7 +195,7 @@ export async function requestSubbotCode(id, phoneNumber, sock, from) {
 
       if (msg.type === "status") {
         const subJid = msg.jid ? msg.jid.split(":")[0].split("@")[0] + "@s.whatsapp.net" : null;
-        updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false, lid: msg.lid || null });
+        updateBotStatus(id, { jid: subJid, status: msg.status, label: id.toUpperCase(), isMain: false, lid: msg.lid || null, pushName: msg.pushName || null });
 
         if (msg.status === "online") {
           clearTimeout(cleanupTimeout);
