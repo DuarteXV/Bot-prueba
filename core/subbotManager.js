@@ -27,6 +27,10 @@ function isSessionRegistered(sessionDir) {
   }
 }
 
+function esLabelGenerico(label) {
+  return !label || label === "Subbot" || label === "MAIN" || label.startsWith("SUB_");
+}
+
 export function registerMainBot(sock, label = "MAIN") {
   mainSock = sock;
   const rawJid = sock.user?.id || "";
@@ -36,7 +40,10 @@ export function registerMainBot(sock, label = "MAIN") {
   const rawLid = sock.user?.lid || "";
   const lid = rawLid ? rawLid.split(":")[0] : "";
 
-  activeBots.set("main", { label, jid, status, isMain: true, lid });
+  const existing = jid ? db.getBot(jid) : null;
+  const labelFinal = !esLabelGenerico(existing?.label) ? existing.label : label;
+
+  activeBots.set("main", { label: labelFinal, jid, status, isMain: true, lid });
 
   if (jid) {
     const oldMains = db.getAllBots().filter(b => b.isMain && b.jid !== jid);
@@ -44,7 +51,7 @@ export function registerMainBot(sock, label = "MAIN") {
       db.setBot(old.jid, { isMain: false, status: "offline" }, true);
     }
 
-    db.setBot(jid, { label, jid, status, isMain: true, lid });
+    db.setBot(jid, { label: labelFinal, jid, status, isMain: true, lid });
     global.mainBotNum = jid.split("@")[0];
   }
 
@@ -63,8 +70,11 @@ export function registerMainBot(sock, label = "MAIN") {
             db.setBot(old.jid, { isMain: false, status: "offline" }, true);
           }
 
-          activeBots.set("main", { label, jid: currentJid, status: "online", isMain: true, lid: currentLid });
-          db.setBot(currentJid, { label, jid: currentJid, status: "online", isMain: true, lid: currentLid });
+          const existingNow = db.getBot(currentJid);
+          const labelFinalNow = !esLabelGenerico(existingNow?.label) ? existingNow.label : label;
+
+          activeBots.set("main", { label: labelFinalNow, jid: currentJid, status: "online", isMain: true, lid: currentLid });
+          db.setBot(currentJid, { label: labelFinalNow, jid: currentJid, status: "online", isMain: true, lid: currentLid });
           global.mainBotNum = currentJid.split("@")[0];
         }
       }
@@ -75,6 +85,14 @@ export function registerMainBot(sock, label = "MAIN") {
 export function updateBotStatus(id, data) {
   const current = activeBots.get(id) || {};
   activeBots.set(id, { ...current, ...data });
+
+  const targetKey = data.jid || id;
+  const existing = db.getBot(targetKey);
+
+  if (!esLabelGenerico(existing?.label) && data.label) {
+    delete data.label;
+  }
+
   if (data.jid) {
     db.deleteBot(id);
     db.setBot(data.jid, data);
