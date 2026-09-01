@@ -20,10 +20,8 @@ const logger = pino({ level: "silent" });
 
 let pluginsLoaded = false;
 
-// WhatsApp invalida el pairing code ~60s después de generado
 const PAIRING_TIMEOUT_MS = 60_000;
 
-// Backoff exponencial con techo + jitter, en vez de un fijo 5s
 function backoffDelay(attempt) {
   const base = 5000;
   const capped = Math.min(60_000, base * Math.pow(1.6, Math.min(attempt, 8)));
@@ -151,7 +149,6 @@ async function startWorker(_attempt = 0) {
       code = code?.match(/.{1,4}/g)?.join("-") || code;
       parentPort.postMessage({ type: "code", code });
 
-      // Si no se ingresa el código en 60s, cerramos limpio (no queda colgado)
       pairingTimer = setTimeout(() => {
         if (!connected) {
           parentPort.postMessage({ type: "pairing_timeout" });
@@ -179,7 +176,9 @@ async function startWorker(_attempt = 0) {
       const rawLid = sock.user?.lid || "";
       const lidLimpio = rawLid ? rawLid.split(":")[0] : "";
 
-      parentPort.postMessage({ type: "status", status: "online", jid: jidLimpio, lid: lidLimpio });
+      const pushName = sock.user?.name || sock.user?.verifiedName || "";
+
+      parentPort.postMessage({ type: "status", status: "online", jid: jidLimpio, lid: lidLimpio, pushName });
       await flushPending();
     }
 
