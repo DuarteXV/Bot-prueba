@@ -1,6 +1,15 @@
 import { db } from "../../database/db.js";
 import config from "../../config.js";
 
+function cleanJid(jid = "") {
+  if (!jid) return "";
+  const atIndex = jid.lastIndexOf("@");
+  if (atIndex === -1) return jid.split(":")[0];
+  const userPart = jid.slice(0, atIndex).split(":")[0];
+  const domainPart = jid.slice(atIndex + 1);
+  return `${userPart}@${domainPart}`;
+}
+
 export default {
   name: ["bots", "listbots"],
   description: "Muestra los bots conectados en el grupo actual",
@@ -17,7 +26,6 @@ export default {
       const obtenerNombre = (numero) => {
         try {
           const bot = db.getBot(`${numero}@s.whatsapp.net`);
-
           if (
             bot?.label &&
             bot.label !== "Subbot" &&
@@ -26,7 +34,6 @@ export default {
           ) {
             return bot.label;
           }
-
           return bot?.pushName || bot?.name || config.botName;
         } catch {
           return config.botName;
@@ -34,19 +41,7 @@ export default {
       };
 
       const metadata = groupMeta || (await sock.groupMetadata(from));
-
-      const participantLids = new Set(
-        metadata.participants
-          .map((p) => p.id)
-          .filter((id) => id.endsWith("@lid"))
-          .map((id) => limpiarNumero(id))
-      );
-
-      const participantNums = new Set(
-        metadata.participants
-          .map((p) => (!p.id.endsWith("@lid") ? limpiarNumero(p.id) : null))
-          .filter(Boolean)
-      );
+      const participants = metadata.participants.map((p) => cleanJid(p.id));
 
       const numeroPrincipal = limpiarNumero(sock.user?.id);
       const nombrePrincipal = obtenerNombre(numeroPrincipal);
@@ -54,18 +49,24 @@ export default {
 
       const todosLosBots = db.getAllBots().filter((b) => !b.isMain);
 
-      const estaEnGrupo = (bot) => {
-        const num = limpiarNumero(bot.jid || bot.id);
-        if (num && participantNums.has(num)) return true;
-        if (bot.lid && participantLids.has(bot.lid)) return true;
-        return false;
+      // Para cada bot conocido (por número o por lid), buscamos su jid REAL tal cual está en el grupo
+      const findTarget = (numero, lid) => {
+        return metadata.participants.find((p) => {
+          const clean = cleanJid(p.id);
+          if (!clean.endsWith("@lid")) return clean === `${numero}@s.whatsapp.net`;
+          return lid && limpiarNumero(clean) === lid;
+        });
       };
 
-      const subbotsEnGrupo = todosLosBots.filter(estaEnGrupo);
+      const subbotsEnGrupo = todosLosBots
+        .map((bot) => {
+          const numero = limpiarNumero(bot.jid || bot.id);
+          const target = findTarget(numero, bot.lid);
+          return target ? { ...bot, numero, targetJid: cleanJid(target.id) } : null;
+        })
+        .filter(Boolean);
 
-      const principalEnGrupo =
-        participantNums.has(numeroPrincipal) ||
-        (principalData?.lid && participantLids.has(principalData.lid));
+      const principalTarget = findTarget(numeroPrincipal, principalData?.lid);
 
       const participantsMentions = [];
 
@@ -74,42 +75,21 @@ export default {
       report += `〔🌀〕Sub-bots totales: ${todosLosBots.length}\n`;
       report += `〔🌱〕En este grupo: ${subbotsEnGrupo.length}\n\n`;
 
-      if (principalEnGrupo) {
-        const matchPrincipal = metadata.participants.find(
-          (p) => p.id.endsWith("@lid") && limpiarNumero(p.id) === principalData?.lid
-        );
-        const jidPrincipal = matchPrincipal
-          ? matchPrincipal.id
-          : principalData?.lid
-          ? `${principalData.lid}@lid`
-          : `${numeroPrincipal}@s.whatsapp.net`;
-
+      if (principalTarget) {
+        const jidPrincipal = cleanJid(principalTarget.id);
         participantsMentions.push(jidPrincipal);
-
         report += `> *𖠌 ʙᴏᴛ::* @${numeroPrincipal} (${nombrePrincipal})\n`;
         report += `> *⚝ ᴛɪᴘᴏ::* Principal 👑\n\n`;
       }
 
       if (subbotsEnGrupo.length > 0) {
         for (const bot of subbotsEnGrupo) {
-          const numero = limpiarNumero(bot.jid || bot.id);
-          const nombreSub = obtenerNombre(numero);
-
-          const matchParticipant = metadata.participants.find(
-            (p) => p.id.endsWith("@lid") && limpiarNumero(p.id) === bot.lid
-          );
-          const jidSub = matchParticipant
-            ? matchParticipant.id
-            : bot.lid
-            ? `${bot.lid}@lid`
-            : `${numero}@s.whatsapp.net`;
-
-          participantsMentions.push(jidSub);
-
-          report += `> *𖠌 ʙᴏᴛ::* @${numero} (${nombreSub})\n`;
+          const nombreSub = obtenerNombre(bot.numero);
+          participantsMentions.push(bot.targetJid);
+          report += `> *𖠌 ʙᴏᴛ::* @${bot.numero} (${nombreSub})\n`;
           report += `> *⚝ ᴛɪᴘᴏ::* Sub-bot 🌀\n\n`;
         }
-      } else if (!principalEnGrupo) {
+      } else if (!principalTarget) {
         report += `⚠️ No hay ningún bot de este sistema dentro de este grupo.\n\n`;
       }
 
@@ -117,10 +97,7 @@ export default {
 
       await sock.sendMessage(
         from,
-        {
-          text: report,
-          mentions: participantsMentions.filter(Boolean)
-        },
+        { text: report, mentions: participantsMentions.filter(Boolean) },
         { quoted: msg }
       );
 
@@ -128,9 +105,7 @@ export default {
     } catch (e) {
       console.error(e);
       await react("❌");
-      if (reply) {
-        await reply({ text: `Failed` });
-      }
+      if (reply) await reply({ text: `Failed` });
     }
   }
 };
