@@ -1,14 +1,6 @@
 import { db } from "../../database/db.js";
 import config from "../../config.js";
-
-function cleanJid(jid = "") {
-  if (!jid) return "";
-  const atIndex = jid.lastIndexOf("@");
-  if (atIndex === -1) return jid.split(":")[0];
-  const userPart = jid.slice(0, atIndex).split(":")[0];
-  const domainPart = jid.slice(atIndex + 1);
-  return `${userPart}@${domainPart}`;
-}
+import { jidNormalizedUser, isLidUser } from "@whiskeysockets/baileys";
 
 export default {
   name: ["bots", "listbots"],
@@ -41,7 +33,14 @@ export default {
       };
 
       const metadata = groupMeta || (await sock.groupMetadata(from));
-      const participants = metadata.participants.map((p) => cleanJid(p.id));
+
+      const findTarget = (numero, lid) => {
+        return metadata.participants.find((p) => {
+          const clean = jidNormalizedUser(p.id);
+          if (!isLidUser(clean)) return clean === `${numero}@s.whatsapp.net`;
+          return lid && limpiarNumero(clean) === lid;
+        });
+      };
 
       const numeroPrincipal = limpiarNumero(sock.user?.id);
       const nombrePrincipal = obtenerNombre(numeroPrincipal);
@@ -49,20 +48,11 @@ export default {
 
       const todosLosBots = db.getAllBots().filter((b) => !b.isMain);
 
-      // Para cada bot conocido (por número o por lid), buscamos su jid REAL tal cual está en el grupo
-      const findTarget = (numero, lid) => {
-        return metadata.participants.find((p) => {
-          const clean = cleanJid(p.id);
-          if (!clean.endsWith("@lid")) return clean === `${numero}@s.whatsapp.net`;
-          return lid && limpiarNumero(clean) === lid;
-        });
-      };
-
       const subbotsEnGrupo = todosLosBots
         .map((bot) => {
           const numero = limpiarNumero(bot.jid || bot.id);
           const target = findTarget(numero, bot.lid);
-          return target ? { ...bot, numero, targetJid: cleanJid(target.id) } : null;
+          return target ? { ...bot, numero, targetJid: jidNormalizedUser(target.id) } : null;
         })
         .filter(Boolean);
 
@@ -76,17 +66,19 @@ export default {
       report += `〔🌱〕En este grupo: ${subbotsEnGrupo.length}\n\n`;
 
       if (principalTarget) {
-        const jidPrincipal = cleanJid(principalTarget.id);
+        const jidPrincipal = jidNormalizedUser(principalTarget.id);
+        const digitosVisibles = jidPrincipal.split("@")[0];
         participantsMentions.push(jidPrincipal);
-        report += `> *𖠌 ʙᴏᴛ::* @${numeroPrincipal} (${nombrePrincipal})\n`;
+        report += `> *𖠌 ʙᴏᴛ::* @${digitosVisibles} (${nombrePrincipal})\n`;
         report += `> *⚝ ᴛɪᴘᴏ::* Principal 👑\n\n`;
       }
 
       if (subbotsEnGrupo.length > 0) {
         for (const bot of subbotsEnGrupo) {
           const nombreSub = obtenerNombre(bot.numero);
+          const digitosVisibles = bot.targetJid.split("@")[0];
           participantsMentions.push(bot.targetJid);
-          report += `> *𖠌 ʙᴏᴛ::* @${bot.numero} (${nombreSub})\n`;
+          report += `> *𖠌 ʙᴏᴛ::* @${digitosVisibles} (${nombreSub})\n`;
           report += `> *⚝ ᴛɪᴘᴏ::* Sub-bot 🌀\n\n`;
         }
       } else if (!principalTarget) {
