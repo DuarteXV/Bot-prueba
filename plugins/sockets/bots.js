@@ -25,8 +25,8 @@ export default {
         });
       };
 
-      const numeroPrincipal = limpiarNumero(sock.user?.id);
-      const principalData = db.getBot(`${numeroPrincipal}@s.whatsapp.net`);
+      const mainData = db.getAllBots().find((b) => b.isMain);
+      const numeroPrincipal = mainData ? limpiarNumero(mainData.jid || mainData.id) : null;
 
       const todosLosBots = db.getAllBots().filter((b) => !b.isMain);
 
@@ -38,7 +38,7 @@ export default {
         })
         .filter(Boolean);
 
-      const principalTarget = findTarget(numeroPrincipal, principalData?.lid);
+      const principalTarget = numeroPrincipal ? findTarget(numeroPrincipal, mainData?.lid) : null;
 
       const participantsMentions = [];
 
