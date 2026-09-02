@@ -15,23 +15,6 @@ export default {
       const limpiarNumero = (jid = "") =>
         jid.split("@")[0].split(":")[0].replace(/\D/g, "");
 
-      const obtenerNombre = (numero) => {
-        try {
-          const bot = db.getBot(`${numero}@s.whatsapp.net`);
-          if (
-            bot?.label &&
-            bot.label !== "Subbot" &&
-            bot.label !== "MAIN" &&
-            !bot.label.startsWith("SUB_")
-          ) {
-            return bot.label;
-          }
-          return bot?.pushName || bot?.name || config.botName;
-        } catch {
-          return config.botName;
-        }
-      };
-
       const metadata = groupMeta || (await sock.groupMetadata(from));
 
       const findTarget = (numero, lid) => {
@@ -43,7 +26,6 @@ export default {
       };
 
       const numeroPrincipal = limpiarNumero(sock.user?.id);
-      const nombrePrincipal = obtenerNombre(numeroPrincipal);
       const principalData = db.getBot(`${numeroPrincipal}@s.whatsapp.net`);
 
       const todosLosBots = db.getAllBots().filter((b) => !b.isMain);
@@ -61,7 +43,7 @@ export default {
       const participantsMentions = [];
 
       let report = `•.°· ◇ \`ᒪIՏTᗩ ᗪᗴ ᗷOTՏ ᗩᑕTIᐯOՏ\` ◇ ·°.•\n`;
-      report += `〔💎〕Principal: ${nombrePrincipal}\n`;
+      report += `〔💎〕Principal: ${config.botName}\n`;
       report += `〔🌀〕Sub-bots totales: ${todosLosBots.length}\n`;
       report += `〔🌱〕En este grupo: ${subbotsEnGrupo.length}\n\n`;
 
@@ -69,16 +51,15 @@ export default {
         const jidPrincipal = jidNormalizedUser(principalTarget.id);
         const digitosVisibles = jidPrincipal.split("@")[0];
         participantsMentions.push(jidPrincipal);
-        report += `> *𖠌 ʙᴏᴛ::* @${digitosVisibles} (${nombrePrincipal})\n`;
+        report += `> *𖠌 ʙᴏᴛ::* @${digitosVisibles}\n`;
         report += `> *⚝ ᴛɪᴘᴏ::* Principal 👑\n\n`;
       }
 
       if (subbotsEnGrupo.length > 0) {
         for (const bot of subbotsEnGrupo) {
-          const nombreSub = obtenerNombre(bot.numero);
           const digitosVisibles = bot.targetJid.split("@")[0];
           participantsMentions.push(bot.targetJid);
-          report += `> *𖠌 ʙᴏᴛ::* @${digitosVisibles} (${nombreSub})\n`;
+          report += `> *𖠌 ʙᴏᴛ::* @${digitosVisibles}\n`;
           report += `> *⚝ ᴛɪᴘᴏ::* Sub-bot 🌀\n\n`;
         }
       } else if (!principalTarget) {
