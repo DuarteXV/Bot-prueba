@@ -26,9 +26,11 @@ function cleanJid(jid = "") {
 async function resolveLid(lidJid, groupMeta, sock) {
   if (!lidJid || !lidJid.endsWith("@lid")) return lidJid;
 
-  const match = groupMeta?.participants?.find((p) => cleanJid(p.lid || "") === lidJid);
-  if (match?.id && !match.id.endsWith("@lid")) {
-    return cleanJid(match.id);
+  // Tu fork guarda el LID en "p.id" (no "p.lid"), y el número real -cuando
+  // WhatsApp lo comparte- en "p.phoneNumber".
+  const match = groupMeta?.participants?.find((p) => cleanJid(p.id || "") === lidJid);
+  if (match?.phoneNumber) {
+    return cleanJid(match.phoneNumber);
   }
 
   try {
