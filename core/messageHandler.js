@@ -66,8 +66,23 @@ export async function handleMessage(sock, rawMsg, botLabel = "MAIN", mainBotNum 
     const participantRaw = isGroup ? (msg.key?.participant || msg.participant || "") : "";
     const participantReal = isGroup ? (msg.key?.participantAlt || "") : "";
 
-    let senderJid = isGroup ? (participantReal || participantRaw) : from;
-    const senderLidJid = isGroup ? participantRaw : "";
+    // Resolución robusta de sender: no asumimos qué campo trae el LID y cuál el número real,
+    // sino que revisamos cuál de los dos termina en "@lid" y usamos el otro.
+    let senderJid;
+    if (isGroup) {
+      senderJid = participantRaw.endsWith("@lid") && participantReal && !participantReal.endsWith("@lid")
+        ? participantReal
+        : participantRaw;
+    } else {
+      const remoteAlt = msg.key?.remoteJidAlt || "";
+      senderJid = from.endsWith("@lid") && remoteAlt && !remoteAlt.endsWith("@lid")
+        ? remoteAlt
+        : from;
+    }
+
+    const senderLidJid = senderJid.endsWith("@lid")
+      ? senderJid
+      : (isGroup ? participantRaw : (from.endsWith("@lid") ? from : ""));
 
     let sender = cleanJid(senderJid);
     const senderLid = cleanJid(senderLidJid);
