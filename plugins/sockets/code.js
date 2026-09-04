@@ -32,6 +32,22 @@ export default {
         `phone final: \`${phone || "(vacío)"}\``
     });
 
+    // 🔧 DEBUG 2 — diagnóstico de por qué resolveLid no encontró el número
+    const gm = await sock.groupMetadata(from).catch(() => null);
+    const matchByLid = gm?.participants?.find(p => p.lid === debugPre);
+    const matchByLidClean = gm?.participants?.find(p => (p.lid || "").split(":")[0] === debugPre);
+
+    await reply({
+      text:
+        `🐛 *DEBUG 2*\n\n` +
+        `total participantes: ${gm?.participants?.length ?? "null"}\n` +
+        `match exacto por lid: ${JSON.stringify(matchByLid)}\n` +
+        `match limpio por lid: ${JSON.stringify(matchByLidClean)}\n` +
+        `tiene signalRepository: ${!!sock.signalRepository}\n` +
+        `tiene lidMapping: ${!!sock.signalRepository?.lidMapping}\n` +
+        `tipo getPNForLID: ${typeof sock.signalRepository?.lidMapping?.getPNForLID}`
+    });
+
     if (!phone || phone.length < 8) {
       return await reply({
         text: `⚠️ No pude detectar tu número automáticamente (esto pasa si tienes activado un *nombre de usuario* de WhatsApp). Intenta de nuevo en unos segundos.`
