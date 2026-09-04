@@ -10,21 +10,27 @@ export default {
   ownerOnly: false,
 
   async run({ sock, from, sender, react, reply, msg, resolveLid }) {
-    console.log("DEBUG msg.key:", JSON.stringify(msg.key));
-    console.log("DEBUG sender recibido:", sender);
-
     await react("🔑");
 
     let resolved = jidNormalizedUser(sender);
-    console.log("DEBUG resolved (jidNormalizedUser):", resolved);
+    const debugPre = resolved;
 
     if (resolved.endsWith("@lid")) {
       resolved = await resolveLid(resolved);
-      console.log("DEBUG resolved tras resolveLid:", resolved);
     }
 
     const phone = resolved.endsWith("@lid") ? "" : resolved.split("@")[0].replace(/\D/g, "");
-    console.log("DEBUG phone final:", phone);
+
+    // 🔧 DEBUG temporal — quitar después de diagnosticar
+    await reply({
+      text:
+        `🐛 *DEBUG*\n\n` +
+        `msg.key:\n\`\`\`${JSON.stringify(msg.key, null, 2)}\`\`\`\n` +
+        `sender recibido: \`${sender}\`\n` +
+        `resolved (jidNormalizedUser): \`${debugPre}\`\n` +
+        `resolved tras resolveLid: \`${resolved}\`\n` +
+        `phone final: \`${phone || "(vacío)"}\``
+    });
 
     if (!phone || phone.length < 8) {
       return await reply({
