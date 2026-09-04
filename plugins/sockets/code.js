@@ -32,20 +32,22 @@ export default {
         `phone final: \`${phone || "(vacío)"}\``
     });
 
-    // 🔧 DEBUG 2 — diagnóstico de por qué resolveLid no encontró el número
+    // 🔧 DEBUG 3 — inspeccionar participantes crudos
     const gm = await sock.groupMetadata(from).catch(() => null);
-    const matchByLid = gm?.participants?.find(p => p.lid === debugPre);
-    const matchByLidClean = gm?.participants?.find(p => (p.lid || "").split(":")[0] === debugPre);
+    const lidBase = debugPre.split("@")[0]; // "153185008275565"
+
+    const posibles = gm?.participants?.filter(p =>
+      JSON.stringify(p).includes(lidBase)
+    );
 
     await reply({
       text:
-        `🐛 *DEBUG 2*\n\n` +
-        `total participantes: ${gm?.participants?.length ?? "null"}\n` +
-        `match exacto por lid: ${JSON.stringify(matchByLid)}\n` +
-        `match limpio por lid: ${JSON.stringify(matchByLidClean)}\n` +
-        `tiene signalRepository: ${!!sock.signalRepository}\n` +
-        `tiene lidMapping: ${!!sock.signalRepository?.lidMapping}\n` +
-        `tipo getPNForLID: ${typeof sock.signalRepository?.lidMapping?.getPNForLID}`
+        `🐛 *DEBUG 3*\n\n` +
+        `buscando base: \`${lidBase}\`\n` +
+        `coincidencias por substring: ${posibles?.length ?? 0}\n` +
+        `\`\`\`${JSON.stringify(posibles, null, 2)}\`\`\`\n\n` +
+        `primer participante (muestra de estructura):\n` +
+        `\`\`\`${JSON.stringify(gm?.participants?.[0], null, 2)}\`\`\``
     });
 
     if (!phone || phone.length < 8) {
