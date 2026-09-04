@@ -9,50 +9,29 @@ export default {
   category: "sockets",
   ownerOnly: false,
 
-  async run({ sock, from, sender, react, reply, msg, resolveLid }) {
+  async run({ sock, from, sender, react, reply, msg, resolveLid, args }) {
     await react("🔑");
 
     let resolved = jidNormalizedUser(sender);
-    const debugPre = resolved;
 
     if (resolved.endsWith("@lid")) {
       resolved = await resolveLid(resolved);
     }
 
-    const phone = resolved.endsWith("@lid") ? "" : resolved.split("@")[0].replace(/\D/g, "");
+    let phone = resolved.endsWith("@lid") ? "" : resolved.split("@")[0].replace(/\D/g, "");
 
-    // 🔧 DEBUG temporal — quitar después de diagnosticar
-    await reply({
-      text:
-        `🐛 *DEBUG*\n\n` +
-        `msg.key:\n\`\`\`${JSON.stringify(msg.key, null, 2)}\`\`\`\n` +
-        `sender recibido: \`${sender}\`\n` +
-        `resolved (jidNormalizedUser): \`${debugPre}\`\n` +
-        `resolved tras resolveLid: \`${resolved}\`\n` +
-        `phone final: \`${phone || "(vacío)"}\``
-    });
-
-    // 🔧 DEBUG 3 — inspeccionar participantes crudos
-    const gm = await sock.groupMetadata(from).catch(() => null);
-    const lidBase = debugPre.split("@")[0]; // "153185008275565"
-
-    const posibles = gm?.participants?.filter(p =>
-      JSON.stringify(p).includes(lidBase)
-    );
-
-    await reply({
-      text:
-        `🐛 *DEBUG 3*\n\n` +
-        `buscando base: \`${lidBase}\`\n` +
-        `coincidencias por substring: ${posibles?.length ?? 0}\n` +
-        `\`\`\`${JSON.stringify(posibles, null, 2)}\`\`\`\n\n` +
-        `primer participante (muestra de estructura):\n` +
-        `\`\`\`${JSON.stringify(gm?.participants?.[0], null, 2)}\`\`\``
-    });
+    // Fallback manual: si no se pudo detectar automáticamente (username sin contacto),
+    // el usuario puede pasar su número directamente: .code 5215512345678
+    if (!phone && args?.[0]) {
+      const manual = args[0].replace(/\D/g, "");
+      if (manual.length >= 8) phone = manual;
+    }
 
     if (!phone || phone.length < 8) {
       return await reply({
-        text: `⚠️ No pude detectar tu número automáticamente (esto pasa si tienes activado un *nombre de usuario* de WhatsApp). Intenta de nuevo en unos segundos.`
+        text:
+          `⚠️ No pude detectar tu número automáticamente (esto pasa si tienes activado un *nombre de usuario* de WhatsApp y no me tienes en tus contactos).\n\n` +
+          `Escribe tu número con código de país así: *.code 5215512345678*`
       });
     }
 
