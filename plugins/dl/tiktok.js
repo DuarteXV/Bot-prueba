@@ -85,6 +85,7 @@ async function processVideoFile(inputP, outP) {
   const originalSizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
   if (originalSizeMB <= MAX_SIZE_MB) {
+    // Remux puro: cero pérdida de calidad/resolución/fps, solo arregla timestamps
     await execAsync(
       `ffmpeg -y -fflags +genpts -i "${inputP}" -c copy -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
     );
@@ -97,16 +98,23 @@ async function processVideoFile(inputP, outP) {
   );
   const fps = fpsRaw.trim() || "30/1";
 
-  const crfSteps = [22, 25, 28];
+  // Con solo 1GB de RAM total en el servidor, un archivo muy pesado (probablemente
+  // 4K o muy alto bitrate) hace que libx264 consuma tanta memoria que el sistema
+  // mata el proceso (visto como "Killed" en el log). Para esos casos, bajamos la
+  // resolución de trabajo — no es lo ideal, pero es lo que el hardware puede procesar
+  // sin reventar.
+  const scaleFilter = originalSizeMB > 150 ? `-vf "scale='min(1280,iw)':-2"` : "";
+
+  const crfSteps = [23, 26, 28];
 
   for (let i = 0; i < crfSteps.length; i++) {
     const crf = crfSteps[i];
 
     await execAsync(
-      `ffmpeg -y -fflags +genpts -i "${inputP}" -r ${fps} -threads 2 ` +
-      `-c:v libx264 -preset veryfast -crf ${crf} ` +
-      `-c:a aac -b:a 128k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`,
-      { maxBuffer: 1024 * 1024 * 20, timeout: 180000 }
+      `ffmpeg -y -fflags +genpts -i "${inputP}" ${scaleFilter} -r ${fps} -threads 1 ` +
+      `-c:v libx264 -preset ultrafast -crf ${crf} ` +
+      `-c:a aac -b:a 96k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`,
+      { maxBuffer: 1024 * 1024 * 20, timeout: 240000 }
     );
 
     await validarSalida(outP);
@@ -181,8 +189,6 @@ export default {
         await reply({ text: `🐛 *DEBUG:* Compresión OK. Salida: ${outSizeMB.toFixed(2)}MB (\`${outP}\`)` });
 
       } catch (e) {
-        // 🔧 DEBUG temporal — el error real de ffmpeg suele estar al FINAL del stderr,
-        // no al inicio (que es solo el banner de versión/configuración)
         const fullError = e?.stack || e?.message || String(e);
         await reply({
           text: `🐛 *DEBUG — falló la compresión:*\n\`\`\`${fullError.slice(-1500)}\`\`\``
@@ -209,7 +215,7 @@ export default {
       caption += `*○ ᴄᴏᴍᴍᴇɴᴛ:* ${result.comments ?? 'N/A'}\n`;
       caption += `*📹 ᴛɪᴛᴜʟᴏ:* ${titulo}`;
 
-      // 🔧 DEBUG temporal — confirmamos justo antes de intentar el envío
+      // 🔧 DEBUG temporal
       const finalSizeMB = fs.statSync(finalPath).size / (1024 * 1024);
       await reply({ text: `🐛 *DEBUG:* Enviando \`${path.basename(finalPath)}\` (${finalSizeMB.toFixed(2)}MB) a WhatsApp...` });
 
@@ -223,7 +229,6 @@ export default {
 
         await react('✅');
       } catch (sendErr) {
-        // 🔧 DEBUG temporal — el error real de Baileys al subir el archivo
         await reply({
           text: `🐛 *DEBUG — falló el envío a WhatsApp:*\n\`\`\`${(sendErr?.stack || sendErr?.message || String(sendErr)).slice(0, 1500)}\`\`\``
         });
