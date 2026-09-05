@@ -98,14 +98,11 @@ async function processVideoFile(inputP, outP) {
   );
   const fps = fpsRaw.trim() || "30/1";
 
-  // Tu servidor tiene muy poca CPU disponible (se midió speed=0.112x, ~9x más
-  // lento que tiempo real). Con eso, un intento de CRF completo puede tardar
-  // varios minutos — usamos UN solo intento (no varios) y bajamos bastante la
-  // resolución de trabajo para que el cómputo por frame sea más liviano y
-  // alcance a terminar dentro del timeout.
+  // Servidor con poca CPU/RAM: escalamos de trabajo según el peso original
+  // para que ffmpeg pueda terminar sin colgarse ni tardar demasiado.
   let scaleFilter = "";
   if (originalSizeMB > 150) {
-    scaleFilter = `-vf "scale='min(854,iw)':-2"`; // ~480p de trabajo, prioriza que TERMINE
+    scaleFilter = `-vf "scale='min(854,iw)':-2"`;
   } else if (originalSizeMB > 100) {
     scaleFilter = `-vf "scale='min(1280,iw)':-2"`;
   }
@@ -114,7 +111,7 @@ async function processVideoFile(inputP, outP) {
     `ffmpeg -y -fflags +genpts -i "${inputP}" ${scaleFilter} -r ${fps} -threads 2 ` +
     `-c:v libx264 -preset ultrafast -crf 28 ` +
     `-c:a aac -b:a 96k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`,
-    { maxBuffer: 1024 * 1024 * 20, timeout: 600000 } // 10 min, un solo intento
+    { maxBuffer: 1024 * 1024 * 20, timeout: 600000 }
   );
 
   await validarSalida(outP);
@@ -171,7 +168,7 @@ export default {
 
       if (sizeMB > 60) {
         await reply({
-          text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB y tu servidor tiene poca potencia para esto — la compresión puede tardar varios minutos. Por favor espera...`
+          text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB, comprimiendo antes de enviar (puede tardar unos minutos)...`
         });
       }
 
@@ -179,16 +176,8 @@ export default {
       try {
         await processVideoFile(inputP, outP);
         finalPath = outP;
-
-        // 🔧 DEBUG temporal
-        const outSizeMB = fs.statSync(outP).size / (1024 * 1024);
-        await reply({ text: `🐛 *DEBUG:* Compresión OK. Salida: ${outSizeMB.toFixed(2)}MB (\`${outP}\`)` });
-
       } catch (e) {
-        const fullError = e?.stack || e?.message || String(e);
-        await reply({
-          text: `🐛 *DEBUG — falló la compresión:*\n\`\`\`${fullError.slice(-1500)}\`\`\``
-        });
+        console.error('No se pudo procesar el video:', e?.stack || e.message);
 
         const inputSizeMB = fs.statSync(inputP).size / (1024 * 1024);
         if (inputSizeMB > 60) {
@@ -211,25 +200,14 @@ export default {
       caption += `*○ ᴄᴏᴍᴍᴇɴᴛ:* ${result.comments ?? 'N/A'}\n`;
       caption += `*📹 ᴛɪᴛᴜʟᴏ:* ${titulo}`;
 
-      // 🔧 DEBUG temporal
-      const finalSizeMB = fs.statSync(finalPath).size / (1024 * 1024);
-      await reply({ text: `🐛 *DEBUG:* Enviando \`${path.basename(finalPath)}\` (${finalSizeMB.toFixed(2)}MB) a WhatsApp...` });
+      await sock.sendMessage(from, {
+        video: { url: finalPath },
+        mimetype: 'video/mp4',
+        fileName: 'tiktok.mp4',
+        caption
+      }, { quoted: msg });
 
-      try {
-        await sock.sendMessage(from, {
-          video: { url: finalPath },
-          mimetype: 'video/mp4',
-          fileName: 'tiktok.mp4',
-          caption
-        }, { quoted: msg });
-
-        await react('✅');
-      } catch (sendErr) {
-        await reply({
-          text: `🐛 *DEBUG — falló el envío a WhatsApp:*\n\`\`\`${(sendErr?.stack || sendErr?.message || String(sendErr)).slice(0, 1500)}\`\`\``
-        });
-        throw sendErr;
-      }
+      await react('✅');
 
     } catch (error) {
       console.error('Error en TikTok download:', error?.stack || error);
