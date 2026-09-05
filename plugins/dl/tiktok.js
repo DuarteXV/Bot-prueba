@@ -85,8 +85,6 @@ async function processVideoFile(inputP, outP) {
   const originalSizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
   if (originalSizeMB <= MAX_SIZE_MB) {
-    // Remux puro: cero pérdida de calidad/resolución/fps, solo arregla timestamps
-    // (bug de duración incorrecta en fuentes VFR, típico de TikTok en alto fps).
     await execAsync(
       `ffmpeg -y -fflags +genpts -i "${inputP}" -c copy -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
     );
@@ -99,9 +97,6 @@ async function processVideoFile(inputP, outP) {
   );
   const fps = fpsRaw.trim() || "30/1";
 
-  // Sistema híbrido: CRF (calidad constante, resolución intacta) con reintentos
-  // subiendo el CRF solo si el resultado sigue pesando más del techo.
-  // -threads 2 y timeout para no saturar un servidor de poca RAM con archivos grandes.
   const crfSteps = [22, 25, 28];
 
   for (let i = 0; i < crfSteps.length; i++) {
@@ -180,8 +175,25 @@ export default {
       try {
         await processVideoFile(inputP, outP);
         finalPath = outP;
+
+        // 🔧 DEBUG temporal
+        const outSizeMB = fs.statSync(outP).size / (1024 * 1024);
+        await reply({ text: `🐛 *DEBUG:* Compresión OK. Salida: ${outSizeMB.toFixed(2)}MB (\`${outP}\`)` });
+
       } catch (e) {
-        console.error('No se pudo procesar el video, se manda el original:', e.message);
+        // 🔧 DEBUG temporal — antes esto solo iba a console.error, ahora también al chat
+        await reply({
+          text: `🐛 *DEBUG — falló la compresión:*\n\`\`\`${(e?.stack || e?.message || String(e)).slice(0, 1500)}\`\`\``
+        });
+
+        const inputSizeMB = fs.statSync(inputP).size / (1024 * 1024);
+        if (inputSizeMB > 60) {
+          await react('❌');
+          return await reply({
+            text: `❌ No se pudo comprimir el video (${inputSizeMB.toFixed(0)}MB) y es demasiado pesado para enviar sin comprimir.`
+          });
+        }
+        // si es ≤60MB, sí es seguro mandar el original tal cual
       }
 
       const titulo = result.title?.trim() || 'Sin título';
@@ -196,14 +208,26 @@ export default {
       caption += `*○ ᴄᴏᴍᴍᴇɴᴛ:* ${result.comments ?? 'N/A'}\n`;
       caption += `*📹 ᴛɪᴛᴜʟᴏ:* ${titulo}`;
 
-      await sock.sendMessage(from, {
-        video: { url: finalPath },
-        mimetype: 'video/mp4',
-        fileName: 'tiktok.mp4',
-        caption
-      }, { quoted: msg });
+      // 🔧 DEBUG temporal — confirmamos justo antes de intentar el envío
+      const finalSizeMB = fs.statSync(finalPath).size / (1024 * 1024);
+      await reply({ text: `🐛 *DEBUG:* Enviando \`${path.basename(finalPath)}\` (${finalSizeMB.toFixed(2)}MB) a WhatsApp...` });
 
-      await react('✅');
+      try {
+        await sock.sendMessage(from, {
+          video: { url: finalPath },
+          mimetype: 'video/mp4',
+          fileName: 'tiktok.mp4',
+          caption
+        }, { quoted: msg });
+
+        await react('✅');
+      } catch (sendErr) {
+        // 🔧 DEBUG temporal — el error real de Baileys al subir el archivo
+        await reply({
+          text: `🐛 *DEBUG — falló el envío a WhatsApp:*\n\`\`\`${(sendErr?.stack || sendErr?.message || String(sendErr)).slice(0, 1500)}\`\`\``
+        });
+        throw sendErr;
+      }
 
     } catch (error) {
       console.error('Error en TikTok download:', error?.stack || error);
