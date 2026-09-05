@@ -98,32 +98,26 @@ async function processVideoFile(inputP, outP) {
   );
   const fps = fpsRaw.trim() || "30/1";
 
-  // Con solo 1GB de RAM total en el servidor, un archivo muy pesado (probablemente
-  // 4K o muy alto bitrate) hace que libx264 consuma tanta memoria que el sistema
-  // mata el proceso (visto como "Killed" en el log). Para esos casos, bajamos la
-  // resolución de trabajo — no es lo ideal, pero es lo que el hardware puede procesar
-  // sin reventar.
-  const scaleFilter = originalSizeMB > 150 ? `-vf "scale='min(1280,iw)':-2"` : "";
-
-  const crfSteps = [23, 26, 28];
-
-  for (let i = 0; i < crfSteps.length; i++) {
-    const crf = crfSteps[i];
-
-    await execAsync(
-      `ffmpeg -y -fflags +genpts -i "${inputP}" ${scaleFilter} -r ${fps} -threads 1 ` +
-      `-c:v libx264 -preset ultrafast -crf ${crf} ` +
-      `-c:a aac -b:a 96k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`,
-      { maxBuffer: 1024 * 1024 * 20, timeout: 240000 }
-    );
-
-    await validarSalida(outP);
-
-    const outSizeMB = fs.statSync(outP).size / (1024 * 1024);
-    if (outSizeMB <= MAX_SIZE_MB || i === crfSteps.length - 1) {
-      return;
-    }
+  // Tu servidor tiene muy poca CPU disponible (se midió speed=0.112x, ~9x más
+  // lento que tiempo real). Con eso, un intento de CRF completo puede tardar
+  // varios minutos — usamos UN solo intento (no varios) y bajamos bastante la
+  // resolución de trabajo para que el cómputo por frame sea más liviano y
+  // alcance a terminar dentro del timeout.
+  let scaleFilter = "";
+  if (originalSizeMB > 150) {
+    scaleFilter = `-vf "scale='min(854,iw)':-2"`; // ~480p de trabajo, prioriza que TERMINE
+  } else if (originalSizeMB > 100) {
+    scaleFilter = `-vf "scale='min(1280,iw)':-2"`;
   }
+
+  await execAsync(
+    `ffmpeg -y -fflags +genpts -i "${inputP}" ${scaleFilter} -r ${fps} -threads 2 ` +
+    `-c:v libx264 -preset ultrafast -crf 28 ` +
+    `-c:a aac -b:a 96k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`,
+    { maxBuffer: 1024 * 1024 * 20, timeout: 600000 } // 10 min, un solo intento
+  );
+
+  await validarSalida(outP);
 }
 
 const MAX_INPUT_MB = 500;
@@ -176,7 +170,9 @@ export default {
       }
 
       if (sizeMB > 60) {
-        await reply({ text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB, comprimiendo antes de enviar...` });
+        await reply({
+          text: `⏳ El video pesa ${sizeMB.toFixed(0)}MB y tu servidor tiene poca potencia para esto — la compresión puede tardar varios minutos. Por favor espera...`
+        });
       }
 
       let finalPath = inputP;
