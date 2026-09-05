@@ -65,8 +65,23 @@ async function descargarAArchivo(url, destPath) {
   await pipeline(response.data, fs.createWriteStream(destPath));
 }
 
+async function validarSalida(outP) {
+  if (!fs.existsSync(outP) || fs.statSync(outP).size === 0) {
+    throw new Error(`ffmpeg generó un archivo vacío o inexistente: ${outP}`);
+  }
+
+  const { stdout } = await execAsync(
+    `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${outP}"`
+  );
+  const outDuration = parseFloat(stdout.trim());
+
+  if (!outDuration || outDuration <= 0) {
+    throw new Error(`ffmpeg generó un archivo corrupto (duración inválida): ${outP}`);
+  }
+}
+
 async function processVideoFile(inputP, outP) {
-  const MAX_SIZE_MB = 60; // techo de seguridad de tamaño
+  const MAX_SIZE_MB = 60;
   const originalSizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
   if (originalSizeMB <= MAX_SIZE_MB) {
@@ -75,35 +90,36 @@ async function processVideoFile(inputP, outP) {
     await execAsync(
       `ffmpeg -y -fflags +genpts -i "${inputP}" -c copy -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
     );
+    await validarSalida(outP);
     return;
   }
 
   const { stdout: fpsRaw } = await execAsync(
     `ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
   );
-  const fps = fpsRaw.trim();
+  const fps = fpsRaw.trim() || "30/1";
 
-  // Sistema híbrido: CRF (calidad constante, resolución intacta, sin "-vf scale")
-  // con reintentos subiendo el CRF solo si el resultado sigue pesando más del techo.
-  // CRF 20 = prácticamente indistinguible del original a simple vista.
-  const crfSteps = [20, 22, 24, 26, 28];
+  // Sistema híbrido: CRF (calidad constante, resolución intacta) con reintentos
+  // subiendo el CRF solo si el resultado sigue pesando más del techo.
+  // -threads 2 y timeout para no saturar un servidor de poca RAM con archivos grandes.
+  const crfSteps = [22, 25, 28];
 
   for (let i = 0; i < crfSteps.length; i++) {
     const crf = crfSteps[i];
 
     await execAsync(
-      `ffmpeg -y -fflags +genpts -i "${inputP}" -r ${fps} -threads 0 ` +
+      `ffmpeg -y -fflags +genpts -i "${inputP}" -r ${fps} -threads 2 ` +
       `-c:v libx264 -preset veryfast -crf ${crf} ` +
-      `-c:a aac -b:a 128k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
+      `-c:a aac -b:a 128k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`,
+      { maxBuffer: 1024 * 1024 * 20, timeout: 180000 }
     );
 
-    const outSizeMB = fs.statSync(outP).size / (1024 * 1024);
+    await validarSalida(outP);
 
+    const outSizeMB = fs.statSync(outP).size / (1024 * 1024);
     if (outSizeMB <= MAX_SIZE_MB || i === crfSteps.length - 1) {
-      return; // aceptamos el resultado: o ya cabe, o es el último intento posible
+      return;
     }
-    // si sigue pesando de más, sube el CRF y vuelve a intentar (más compresión,
-    // ligerísima pérdida extra de calidad, pero solo si de verdad es necesario)
   }
 }
 
@@ -190,7 +206,7 @@ export default {
       await react('✅');
 
     } catch (error) {
-      console.error('Error en TikTok download:', error);
+      console.error('Error en TikTok download:', error?.stack || error);
       await react('❌');
       await reply({
         text: `❌ Error al procesar la descarga: ${error.message}`
