@@ -66,39 +66,45 @@ async function descargarAArchivo(url, destPath) {
 }
 
 async function processVideoFile(inputP, outP) {
-  const MAX_SIZE_MB = 60;
+  const MAX_SIZE_MB = 60; // techo de seguridad de tamaño
   const originalSizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
   if (originalSizeMB <= MAX_SIZE_MB) {
-    // Remux puro (misma calidad, mismo bitrate, mismos fps) pero regenerando
-    // los timestamps para arreglar el bug de "duración incorrecta" en fuentes
-    // con framerate variable (VFR), típico de TikTok en 120fps.
+    // Remux puro: cero pérdida de calidad/resolución/fps, solo arregla timestamps
+    // (bug de duración incorrecta en fuentes VFR, típico de TikTok en alto fps).
     await execAsync(
       `ffmpeg -y -fflags +genpts -i "${inputP}" -c copy -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
     );
     return;
   }
 
-  // Sacamos el framerate real del original para no perderlo al recomprimir
   const { stdout: fpsRaw } = await execAsync(
     `ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
   );
-  const fps = fpsRaw.trim(); // formato tipo "120/1" o "60000/1001"
+  const fps = fpsRaw.trim();
 
-  const { stdout } = await execAsync(
-    `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
-  );
-  const duration = parseFloat(stdout.trim());
+  // Sistema híbrido: CRF (calidad constante, resolución intacta, sin "-vf scale")
+  // con reintentos subiendo el CRF solo si el resultado sigue pesando más del techo.
+  // CRF 20 = prácticamente indistinguible del original a simple vista.
+  const crfSteps = [20, 22, 24, 26, 28];
 
-  const targetSizeBits = MAX_SIZE_MB * 8 * 1024 * 1024 * 0.9;
-  const audioBitrate = 128;
-  const videoBitrate = Math.max(300, Math.floor(targetSizeBits / duration / 1000) - audioBitrate);
+  for (let i = 0; i < crfSteps.length; i++) {
+    const crf = crfSteps[i];
 
-  await execAsync(
-    `ffmpeg -y -fflags +genpts -i "${inputP}" -vf "scale='min(1920,iw)':-2" -r ${fps} -threads 1 ` +
-    `-c:v libx264 -preset veryfast -b:v ${videoBitrate}k -maxrate ${videoBitrate}k -bufsize ${videoBitrate * 2}k ` +
-    `-c:a aac -b:a ${audioBitrate}k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
-  );
+    await execAsync(
+      `ffmpeg -y -fflags +genpts -i "${inputP}" -r ${fps} -threads 0 ` +
+      `-c:v libx264 -preset veryfast -crf ${crf} ` +
+      `-c:a aac -b:a 128k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
+    );
+
+    const outSizeMB = fs.statSync(outP).size / (1024 * 1024);
+
+    if (outSizeMB <= MAX_SIZE_MB || i === crfSteps.length - 1) {
+      return; // aceptamos el resultado: o ya cabe, o es el último intento posible
+    }
+    // si sigue pesando de más, sube el CRF y vuelve a intentar (más compresión,
+    // ligerísima pérdida extra de calidad, pero solo si de verdad es necesario)
+  }
 }
 
 const MAX_INPUT_MB = 500;
