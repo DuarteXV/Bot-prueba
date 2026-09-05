@@ -70,9 +70,20 @@ async function processVideoFile(inputP, outP) {
   const originalSizeMB = fs.statSync(inputP).size / (1024 * 1024);
 
   if (originalSizeMB <= MAX_SIZE_MB) {
-    await execAsync(`ffmpeg -i "${inputP}" -c copy -movflags +faststart "${outP}" -y`);
+    // Remux puro (misma calidad, mismo bitrate, mismos fps) pero regenerando
+    // los timestamps para arreglar el bug de "duración incorrecta" en fuentes
+    // con framerate variable (VFR), típico de TikTok en 120fps.
+    await execAsync(
+      `ffmpeg -y -fflags +genpts -i "${inputP}" -c copy -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
+    );
     return;
   }
+
+  // Sacamos el framerate real del original para no perderlo al recomprimir
+  const { stdout: fpsRaw } = await execAsync(
+    `ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
+  );
+  const fps = fpsRaw.trim(); // formato tipo "120/1" o "60000/1001"
 
   const { stdout } = await execAsync(
     `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${inputP}"`
@@ -84,9 +95,9 @@ async function processVideoFile(inputP, outP) {
   const videoBitrate = Math.max(300, Math.floor(targetSizeBits / duration / 1000) - audioBitrate);
 
   await execAsync(
-    `ffmpeg -i "${inputP}" -vf "scale='min(1920,iw)':-2" -threads 1 -c:v libx264 -preset ultrafast ` +
-    `-b:v ${videoBitrate}k -maxrate ${videoBitrate}k -bufsize ${videoBitrate * 2}k ` +
-    `-c:a aac -b:a ${audioBitrate}k -movflags +faststart "${outP}" -y`
+    `ffmpeg -y -fflags +genpts -i "${inputP}" -vf "scale='min(1920,iw)':-2" -r ${fps} -threads 1 ` +
+    `-c:v libx264 -preset veryfast -b:v ${videoBitrate}k -maxrate ${videoBitrate}k -bufsize ${videoBitrate * 2}k ` +
+    `-c:a aac -b:a ${audioBitrate}k -avoid_negative_ts make_zero -movflags +faststart "${outP}"`
   );
 }
 
