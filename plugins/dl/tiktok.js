@@ -181,9 +181,11 @@ export default {
         await reply({ text: `🐛 *DEBUG:* Compresión OK. Salida: ${outSizeMB.toFixed(2)}MB (\`${outP}\`)` });
 
       } catch (e) {
-        // 🔧 DEBUG temporal — antes esto solo iba a console.error, ahora también al chat
+        // 🔧 DEBUG temporal — el error real de ffmpeg suele estar al FINAL del stderr,
+        // no al inicio (que es solo el banner de versión/configuración)
+        const fullError = e?.stack || e?.message || String(e);
         await reply({
-          text: `🐛 *DEBUG — falló la compresión:*\n\`\`\`${(e?.stack || e?.message || String(e)).slice(0, 1500)}\`\`\``
+          text: `🐛 *DEBUG — falló la compresión:*\n\`\`\`${fullError.slice(-1500)}\`\`\``
         });
 
         const inputSizeMB = fs.statSync(inputP).size / (1024 * 1024);
@@ -193,7 +195,6 @@ export default {
             text: `❌ No se pudo comprimir el video (${inputSizeMB.toFixed(0)}MB) y es demasiado pesado para enviar sin comprimir.`
           });
         }
-        // si es ≤60MB, sí es seguro mandar el original tal cual
       }
 
       const titulo = result.title?.trim() || 'Sin título';
