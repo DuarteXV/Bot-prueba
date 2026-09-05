@@ -15,24 +15,22 @@ export default {
     }
 
     try {
-      const files = fs.readdirSync(TMP_DIR);
+      const entries = fs.readdirSync(TMP_DIR, { withFileTypes: true });
       let borrados = 0;
-      let totalBytes = 0;
 
-      for (const file of files) {
-        const filePath = path.join(TMP_DIR, file);
+      for (const entry of entries) {
+        const fullPath = path.join(TMP_DIR, entry.name);
         try {
-          const stat = fs.statSync(filePath);
-          if (stat.isFile()) {
-            totalBytes += stat.size;
-            fs.unlinkSync(filePath);
-            borrados++;
+          if (entry.isDirectory()) {
+            fs.rmSync(fullPath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(fullPath);
           }
+          borrados++;
         } catch {}
       }
 
-      const mb = (totalBytes / 1024 / 1024).toFixed(2);
-      await reply({ text: `🧹 Se borraron *${borrados}* archivo(s) de tmp (${mb} MB liberados).` });
+      await reply({ text: `🧹 Se borraron *${borrados}* elemento(s) de tmp (archivos y carpetas).` });
 
       if (global.gc) global.gc();
     } catch (e) {
